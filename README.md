@@ -40,9 +40,9 @@ async with ExactOnlineClient(oauth=oauth) as client:
 
 ## Authentication
 
-Exact Online uses OAuth 2.0 with a specific quirk: refresh tokens rotate on every use. When you refresh an access token, you get a new refresh token back, and the old one is immediately invalidated. If you don't persist the new token, you lose access and the user must re-authenticate.
+Exact Online uses OAuth 2.0. Access tokens expire after 10 minutes—the SDK handles this automatically by refreshing 30 seconds before expiry to prevent race conditions.
 
-The SDK handles the OAuth flow mechanics, but you must implement `TokenStorage` to persist tokens.
+**Important**: Exact Online uses rotating refresh tokens. When you refresh an access token, you also receive a *new* refresh token, and the previous one is immediately invalidated. If you don't persist the new tokens, you lose access and the user must re-authenticate. This is why the SDK requires you to implement `TokenStorage`.
 
 > **Source**: [Exact Online OAuth Documentation](https://support.exactonline.com/community/s/knowledge-base#All-All-DNO-Content-oauth-eol-oauth-dev-impleovervw)
 
@@ -66,7 +66,7 @@ tokens = await oauth.exchange_code(authorization_code)
 
 ### Automatic Token Refresh
 
-Access tokens expire after 10 minutes. The SDK automatically refreshes them when needed—you don't need to handle this manually. To prevent race conditions in concurrent requests, the SDK refreshes tokens 30 seconds before actual expiry.
+The SDK automatically refreshes tokens when needed—you don't need to handle this manually. If you need direct access to the current token:
 
 ```python
 access_token = await oauth.ensure_valid_token()
