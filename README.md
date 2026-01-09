@@ -705,7 +705,7 @@ The Purchase Item Prices API only supports bulk sync operations—no CRUD operat
 
 ```python
 # Initial sync (get all purchase item prices)
-result = await client.purchase_item_prices.sync(division=123, timestamp=1)
+result = await client.purchase_item_prices.sync(division=123, timestamp=0)
 
 # Incremental sync (get changes since last sync)
 result = await client.purchase_item_prices.sync(
@@ -717,7 +717,7 @@ for price in result.items:
     print(f"{price.item_code}: {price.price} {price.currency}")
 ```
 
-> **Note**: Use `timestamp=1` for the first sync (not 0). Only timestamp filtering is supported for optimal performance.
+> **Note**: Only timestamp filtering is supported for optimal performance. Do not use `$select=*`.
 
 ## Development
 

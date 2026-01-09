@@ -22,7 +22,7 @@ class PurchaseItemPricesAPI:
 
     Usage:
         # Initial sync (get all)
-        result = await client.purchase_item_prices.sync(division=123, timestamp=1)
+        result = await client.purchase_item_prices.sync(division=123, timestamp=0)
 
         # Incremental sync
         result = await client.purchase_item_prices.sync(
@@ -41,7 +41,7 @@ class PurchaseItemPricesAPI:
         self,
         division: int,
         *,
-        timestamp: int = 1,
+        timestamp: int = 0,
         select: Sequence[str] | None = None,
     ) -> SyncResult[PurchaseItemPrice]:
         """Sync purchase item prices.
@@ -49,18 +49,20 @@ class PurchaseItemPricesAPI:
         Returns up to 1000 records modified since the given timestamp.
         Use the returned timestamp for the next sync call.
 
-        Note: For first sync, use timestamp=1 (not 0).
         Note: Only timestamp filter is allowed for optimal performance.
 
         Args:
             division: The division ID.
-            timestamp: Sync from this timestamp (1 = get all).
+            timestamp: Sync from this timestamp (0 = get all).
             select: Optional list of fields (do not use '*').
 
         Returns:
             SyncResult containing items, next timestamp, and has_more flag.
         """
-        params: dict[str, Any] = {"$filter": f"Timestamp gt {timestamp}"}
+        params: dict[str, Any] = {}
+
+        if timestamp > 0:
+            params["$filter"] = f"Timestamp gt {timestamp}"
 
         if select:
             params["$select"] = ",".join(select)
