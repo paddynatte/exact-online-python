@@ -19,25 +19,17 @@ class Account(ExactBaseModel):
     code: str | None = Field(default=None, alias="Code")
     name: str | None = Field(default=None, alias="Name")
     search_code: str | None = Field(default=None, alias="SearchCode")
-
-    # Classification
     is_supplier: bool | None = Field(default=None, alias="IsSupplier")
     is_sales: bool | None = Field(default=None, alias="IsSales")
     is_reseller: bool | None = Field(default=None, alias="IsReseller")
     is_competitor: bool | None = Field(default=None, alias="IsCompetitor")
     is_mailing: bool | None = Field(default=None, alias="IsMailing")
     is_accountant: bool | None = Field(default=None, alias="IsAccountant")
-
-    # Status (C=Customer, S=Supplier, N=None/Prospect, A=Archived)
     status: str | None = Field(default=None, alias="Status")
-
-    # Contact info
     email: str | None = Field(default=None, alias="Email")
     phone: str | None = Field(default=None, alias="Phone")
     fax: str | None = Field(default=None, alias="Fax")
     website: str | None = Field(default=None, alias="Website")
-
-    # Address
     address_line1: str | None = Field(default=None, alias="AddressLine1")
     address_line2: str | None = Field(default=None, alias="AddressLine2")
     address_line3: str | None = Field(default=None, alias="AddressLine3")
@@ -46,14 +38,10 @@ class Account(ExactBaseModel):
     state: str | None = Field(default=None, alias="State")
     country: str | None = Field(default=None, alias="Country")
     country_name: str | None = Field(default=None, alias="CountryName")
-
-    # Financial
     vat_number: str | None = Field(default=None, alias="VATNumber")
     chamber_of_commerce: str | None = Field(default=None, alias="ChamberOfCommerce")
     currency: str | None = Field(default=None, alias="Currency")
     credit_line: float | None = Field(default=None, alias="CreditLine")
-
-    # Payment terms
     payment_condition_sales: str | None = Field(
         default=None, alias="PaymentConditionSales"
     )
@@ -66,37 +54,23 @@ class Account(ExactBaseModel):
     payment_condition_purchase_description: str | None = Field(
         default=None, alias="PaymentConditionPurchaseDescription"
     )
-
-    # Bank
     bank_account: UUID | None = Field(default=None, alias="BankAccount")
     iban: str | None = Field(default=None, alias="IBAN")
     bic: str | None = Field(default=None, alias="BIC")
-
-    # Account manager
     account_manager: UUID | None = Field(default=None, alias="AccountManager")
     account_manager_full_name: str | None = Field(
         default=None, alias="AccountManagerFullName"
     )
-
-    # Categorization
     classification: UUID | None = Field(default=None, alias="Classification")
     classification_description: str | None = Field(
         default=None, alias="ClassificationDescription"
     )
-
-    # Dates
     created: ODataDateTime = Field(default=None, alias="Created")
     modified: ODataDateTime = Field(default=None, alias="Modified")
     start_date: ODataDateTime = Field(default=None, alias="StartDate")
     end_date: ODataDateTime = Field(default=None, alias="EndDate")
-
-    # Logo
     logo_url: str | None = Field(default=None, alias="LogoUrl")
-
-    # Remarks
     remarks: str | None = Field(default=None, alias="Remarks")
-
-    # Sync timestamp
     timestamp: int | None = Field(default=None, alias="Timestamp")
 
     def __repr__(self) -> str:
