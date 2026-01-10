@@ -13,21 +13,15 @@ class PurchaseOrderLine(ExactBaseModel):
     id: UUID = Field(alias="ID")
     purchase_order_id: UUID = Field(alias="PurchaseOrderID")
     line_number: int | None = Field(default=None, alias="LineNumber")
-
-    # Item details
     item: UUID | None = Field(default=None, alias="Item")
     item_code: str | None = Field(default=None, alias="ItemCode")
     item_description: str | None = Field(default=None, alias="ItemDescription")
-
-    # Quantity and units
     quantity: float | None = Field(default=None, alias="Quantity")
     quantity_in_purchase_units: float | None = Field(
         default=None, alias="QuantityInPurchaseUnits"
     )
     unit: str | None = Field(default=None, alias="Unit")
     unit_description: str | None = Field(default=None, alias="UnitDescription")
-
-    # Pricing
     unit_price: float | None = Field(default=None, alias="UnitPrice")
     net_price: float | None = Field(default=None, alias="NetPrice")
     amount_dc: float | None = Field(default=None, alias="AmountDC")
@@ -35,18 +29,12 @@ class PurchaseOrderLine(ExactBaseModel):
     vat_amount: float | None = Field(default=None, alias="VATAmount")
     vat_code: str | None = Field(default=None, alias="VATCode")
     vat_percentage: float | None = Field(default=None, alias="VATPercentage")
-
-    # Receipt tracking
     receipt_date: ODataDateTime = Field(default=None, alias="ReceiptDate")
     quantity_received: float | None = Field(default=None, alias="QuantityReceived")
     in_stock: float | None = Field(default=None, alias="InStock")
-
-    # Project
     project: UUID | None = Field(default=None, alias="Project")
     project_code: str | None = Field(default=None, alias="ProjectCode")
     project_description: str | None = Field(default=None, alias="ProjectDescription")
-
-    # Sync timestamp (for sync API)
     timestamp: int | None = Field(default=None, alias="Timestamp")
 
 
@@ -56,8 +44,6 @@ class PurchaseOrder(ExactBaseModel):
     purchase_order_id: UUID = Field(alias="PurchaseOrderID")
     order_number: int | None = Field(default=None, alias="OrderNumber")
     description: str | None = Field(default=None, alias="Description")
-
-    # Supplier
     supplier: UUID | None = Field(default=None, alias="Supplier")
     supplier_code: str | None = Field(default=None, alias="SupplierCode")
     supplier_name: str | None = Field(default=None, alias="SupplierName")
@@ -65,23 +51,15 @@ class PurchaseOrder(ExactBaseModel):
     supplier_contact_person_full_name: str | None = Field(
         default=None, alias="SupplierContactPersonFullName"
     )
-
-    # Dates (OData format: /Date(milliseconds)/)
     order_date: ODataDateTime = Field(default=None, alias="OrderDate")
     receipt_date: ODataDateTime = Field(default=None, alias="ReceiptDate")
     created: ODataDateTime = Field(default=None, alias="Created")
     approved: ODataDateTime = Field(default=None, alias="Approved")
-
-    # Status
     receipt_status: int | None = Field(default=None, alias="ReceiptStatus")
-    # 10=Open, 20=Partial, 30=Complete, 40=Canceled
     approval_status: int | None = Field(default=None, alias="ApprovalStatus")
-    # 0=Awaiting, 1=Automatically, 2=Approved
     approval_status_description: str | None = Field(
         default=None, alias="ApprovalStatusDescription"
     )
-
-    # Amounts
     amount_dc: float | None = Field(default=None, alias="AmountDC")
     amount_fc: float | None = Field(default=None, alias="AmountFC")
     amount_fc_excl_vat: float | None = Field(default=None, alias="AmountFCExclVat")
@@ -91,15 +69,11 @@ class PurchaseOrder(ExactBaseModel):
         default=None, alias="AmountDiscountExclVat"
     )
     currency: str | None = Field(default=None, alias="Currency")
-
-    # Warehouse
     warehouse: UUID | None = Field(default=None, alias="Warehouse")
     warehouse_code: str | None = Field(default=None, alias="WarehouseCode")
     warehouse_description: str | None = Field(
         default=None, alias="WarehouseDescription"
     )
-
-    # Delivery
     delivery_account: UUID | None = Field(default=None, alias="DeliveryAccount")
     delivery_account_code: str | None = Field(
         default=None, alias="DeliveryAccountCode"
@@ -112,48 +86,28 @@ class PurchaseOrder(ExactBaseModel):
     delivery_contact_person_full_name: str | None = Field(
         default=None, alias="DeliveryContactPersonFullName"
     )
-
-    # Shipping
     shipping_method: UUID | None = Field(default=None, alias="ShippingMethod")
     shipping_method_code: str | None = Field(default=None, alias="ShippingMethodCode")
     shipping_method_description: str | None = Field(
         default=None, alias="ShippingMethodDescription"
     )
-
-    # Reference & Remarks
     your_ref: str | None = Field(default=None, alias="YourRef")
     remarks: str | None = Field(default=None, alias="Remarks")
-
-    # Creator & Approver
     creator: UUID | None = Field(default=None, alias="Creator")
     creator_full_name: str | None = Field(default=None, alias="CreatorFullName")
     approver: UUID | None = Field(default=None, alias="Approver")
     approver_full_name: str | None = Field(default=None, alias="ApproverFullName")
-
-    # Purchase Agent
     purchase_agent: UUID | None = Field(default=None, alias="PurchaseAgent")
     purchase_agent_full_name: str | None = Field(
         default=None, alias="PurchaseAgentFullName"
     )
-
-    # Related entities
     sales_order: UUID | None = Field(default=None, alias="SalesOrder")
     sales_order_number: int | None = Field(default=None, alias="SalesOrderNumber")
-
-    # Line count
     purchase_order_line_count: int | None = Field(
         default=None, alias="PurchaseOrderLineCount"
     )
-
-    # Embedded lines (when included in response)
     purchase_order_lines: list[PurchaseOrderLine] | None = Field(
         default=None, alias="PurchaseOrderLines"
     )
-
-    # Source
     source: int | None = Field(default=None, alias="Source")
-    # 1=Manual, 2=Import, 3=Other, 4=PO, 5=SO, 6=Supplier items,
-    # 7=Subcontract, 8=PO advice, 9=Shop order, 10=MRP, 11=REST API, 12=Merge
-
-    # Sync timestamp (for sync API)
     timestamp: int | None = Field(default=None, alias="Timestamp")
