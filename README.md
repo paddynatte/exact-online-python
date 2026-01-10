@@ -2,6 +2,22 @@
 
 A Python SDK for the Exact Online API. Async-first, fully typed, with automatic token refresh, rate limiting, retry logic, and webhook support.
 
+## Contents
+
+- [Installation](#installation)
+- [Development](#development)
+- [Quick start](#quick-start)
+- [Authentication](#authentication)
+- [Regions](#regions)
+- [Usage](#usage)
+- [Rate limiting](#rate-limiting)
+- [Retry logic](#retry-logic)
+- [Connection pooling](#connection-pooling)
+- [Restrictions](#restrictions)
+- [Errors](#errors)
+- [Resources](#resources)
+- [Notes](#notes)
+
 ## Installation
 
 ```bash
@@ -10,9 +26,26 @@ pip install exact-online-python
 
 Requires Python 3.13+.
 
-## Quick Start
+## Development
 
-The SDK requires you to implement token storage yourself—this keeps the SDK lean and lets you use whatever persistence layer you prefer (database, Redis, file, etc.).
+Install dev dependencies and run tests:
+
+```bash
+uv sync --group dev
+uv run pytest tests/ -v
+uv run pytest tests/ --cov=exact_online
+```
+
+Run linter and type checker:
+
+```bash
+uv run ruff check src/ tests/
+uv run mypy src/ tests/
+```
+
+## Quick start
+
+The SDK requires you to implement token storage yourself. This keeps the SDK lean and lets you use whatever persistence layer you prefer.
 
 ```python
 from exact_online import ExactOnlineClient, OAuthManager, ExactRegion, TokenData
@@ -40,21 +73,19 @@ async with ExactOnlineClient(oauth=oauth) as client:
 
 ## Authentication
 
-Exact Online uses OAuth 2.0. Access tokens expire after 10 minutes—the SDK handles this automatically by refreshing 30 seconds before expiry to prevent race conditions.
+Exact Online uses OAuth 2.0. Access tokens expire after 10 minutes, and the SDK refreshes them automatically 30 seconds before expiry to prevent race conditions.
 
-**Important**: Exact Online uses rotating refresh tokens. When you refresh an access token, you also receive a *new* refresh token, and the previous one is immediately invalidated. If you don't persist the new tokens, you lose access and the user must re-authenticate. This is why the SDK requires you to implement `TokenStorage`.
+Exact Online uses rotating refresh tokens. When you refresh an access token, you also receive a new refresh token, and the previous one is immediately invalidated. If you don't persist the new tokens, you lose access and the user must re-authenticate. This is why the SDK requires you to implement `TokenStorage`. For more details, see the [Exact Online OAuth Documentation](https://support.exactonline.com/community/s/knowledge-base#All-All-DNO-Content-oauth-eol-oauth-dev-impleovervw).
 
-> **Source**: [Exact Online OAuth Documentation](https://support.exactonline.com/community/s/knowledge-base#All-All-DNO-Content-oauth-eol-oauth-dev-impleovervw)
+### Initial authorization
 
-### Initial Authorization
-
-Your application is responsible for the OAuth redirect flow. The SDK provides helpers to generate the authorization URL and exchange the code for tokens.
+Your application handles the OAuth redirect flow. The SDK provides helpers to generate the authorization URL and exchange the code for tokens.
 
 Generate the URL and redirect the user:
 
 ```python
 url = oauth.get_authorization_url(state="csrf-token")
-# Redirect user to this URL...
+# Redirect user to this URL
 ```
 
 After the user authorizes your app, Exact Online redirects them back with a code. Exchange it for tokens:
@@ -64,9 +95,9 @@ tokens = await oauth.exchange_code(authorization_code)
 # Tokens are automatically saved via your TokenStorage
 ```
 
-### Automatic Token Refresh
+### Token refresh
 
-The SDK automatically refreshes tokens when needed—you don't need to handle this manually. If you need direct access to the current token:
+The SDK refreshes tokens automatically. If you need direct access to the current token:
 
 ```python
 access_token = await oauth.ensure_valid_token()
@@ -74,7 +105,7 @@ access_token = await oauth.ensure_valid_token()
 
 ## Regions
 
-Exact Online operates separate instances per region, each with its own API endpoint. You must use the correct region for your account.
+Exact Online operates separate instances per region, each with its own API endpoint. Use the correct region for your account:
 
 ```python
 from exact_online import ExactRegion
@@ -88,15 +119,13 @@ ExactRegion.ES  # Spain       → start.exactonline.es
 ExactRegion.FR  # France      → start.exactonline.fr
 ```
 
-## API Usage
+## Usage
 
-All API methods require an explicit `division` parameter. A division represents a company/administration within Exact Online. This explicit approach prevents accidentally querying the wrong division when working with multiple companies.
+All API methods require an explicit `division` parameter. A division represents a company/administration within Exact Online. This explicit approach prevents accidentally querying the wrong division when working with multiple companies. See the [Exact Online REST API Documentation](https://support.exactonline.com/community/s/knowledge-base#All-All-DNO-Content-gettingstarted) for more details.
 
-> **Source**: [Exact Online REST API Documentation](https://support.exactonline.com/community/s/knowledge-base#All-All-DNO-Content-gettingstarted)
+### Listing records
 
-### Listing Records
-
-The standard API returns up to 60 records per request. The `list()` method returns a `ListResult` that is iterable—you can use it directly in a for loop.
+The standard API returns up to 60 records per request. The `list()` method returns a `ListResult` that you can iterate directly:
 
 ```python
 result = await client.purchase_orders.list(division=123)
@@ -104,40 +133,32 @@ result = await client.purchase_orders.list(division=123)
 for order in result:
     print(order.order_number)
 
-# Also supports len()
 print(f"Got {len(result)} orders")
 ```
 
-You can filter and select specific fields using OData query parameters:
+Filter and select specific fields using OData query parameters:
 
 ```python
 result = await client.purchase_orders.list(
     division=123,
-    odata_filter="ReceiptStatus eq 10",  # OData $filter
-    select=["PurchaseOrderID", "Supplier", "OrderDate"],  # OData $select
-    top=60,   # Max records (capped at 60)
+    odata_filter="ReceiptStatus eq 10",
+    select=["PurchaseOrderID", "Supplier", "OrderDate"],
+    top=60,
 )
 ```
 
-The `odata_filter` parameter accepts standard OData filter expressions. Common examples:
+The `odata_filter` parameter accepts standard OData filter expressions:
 
 ```python
-# Open orders only
-odata_filter="ReceiptStatus eq 10"
-
-# Orders from specific supplier
-odata_filter="Supplier eq guid'abc-123-def'"
-
-# Orders created after a date
-odata_filter="Created gt datetime'2024-01-01'"
-
-# Combining conditions
-odata_filter="ReceiptStatus eq 10 and Supplier eq guid'abc-123-def'"
+odata_filter="ReceiptStatus eq 10"                              # Open orders only
+odata_filter="Supplier eq guid'abc-123-def'"                    # Specific supplier
+odata_filter="Created gt datetime'2024-01-01'"                  # After a date
+odata_filter="ReceiptStatus eq 10 and Supplier eq guid'...'"    # Combined
 ```
 
 ### Pagination
 
-When there are more than 60 records, use the `next_url` property to fetch subsequent pages. The SDK uses Exact Online's `__next` / `$skiptoken` mechanism for reliable pagination.
+When there are more than 60 records, use the `next_url` property to fetch subsequent pages. The SDK uses Exact Online's `__next` / `$skiptoken` mechanism for reliable pagination:
 
 ```python
 result = await client.purchase_orders.list(division=123)
@@ -150,18 +171,16 @@ while result.next_url:
 print(f"Total orders: {len(all_orders)}")
 ```
 
-This approach is more reliable than offset-based pagination (`$skip`) because it handles records being added or removed during pagination.
-
-For convenience, you can also use `list_all()` which handles pagination automatically:
+For convenience, use `list_all()` which handles pagination automatically:
 
 ```python
 async for order in client.purchase_orders.list_all(division=123):
     print(order.order_number)
 ```
 
-### Getting a Single Record
+### Single records
 
-Fetch a specific record by its GUID.
+Fetch a specific record by its GUID:
 
 ```python
 order = await client.purchase_orders.get(
@@ -170,9 +189,9 @@ order = await client.purchase_orders.get(
 )
 ```
 
-### Creating Records
+### Creating records
 
-Create new records by passing a dictionary with the API field names (PascalCase, as Exact Online expects).
+Create new records by passing a dictionary with API field names (PascalCase, as Exact Online expects):
 
 ```python
 new_order = await client.purchase_orders.create(
@@ -187,9 +206,9 @@ new_order = await client.purchase_orders.create(
 )
 ```
 
-### Updating Records
+### Updating records
 
-Update existing records by GUID. Only include the fields you want to change.
+Update existing records by GUID. Only include the fields you want to change:
 
 ```python
 updated = await client.purchase_orders.update(
@@ -199,9 +218,9 @@ updated = await client.purchase_orders.update(
 )
 ```
 
-### Deleting Records
+### Deleting records
 
-Delete a record by GUID.
+Delete a record by GUID:
 
 ```python
 await client.purchase_orders.delete(
@@ -210,272 +229,9 @@ await client.purchase_orders.delete(
 )
 ```
 
-## Sync API
+### Order lines
 
-Some entities support a bulk sync endpoint that returns up to 1000 records per request (compared to 60 for the standard API). The sync API uses timestamps for incremental syncing—you only fetch records that changed since your last sync.
-
-> **Source**: [Exact Online Sync API Documentation](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ReadSyncSyncSyncTimestamp)
-
-### Initial Sync
-
-Start with `timestamp=0` to fetch all records.
-
-```python
-result = await client.purchase_orders.sync(division=123, timestamp=0)
-
-print(f"Fetched {len(result.items)} orders")
-print(f"Next timestamp: {result.timestamp}")
-
-# Store result.timestamp in your database for next sync
-```
-
-### Incremental Sync
-
-Use the timestamp from your last sync to only fetch modified records.
-
-```python
-result = await client.purchase_orders.sync(
-    division=123,
-    timestamp=stored_timestamp,  # From your database
-)
-
-for order in result.items:
-    # Process changed/new orders
-    ...
-
-# Update stored timestamp
-stored_timestamp = result.timestamp
-```
-
-The `result.has_more` flag indicates if there are more records to fetch. Keep calling with the returned timestamp until `has_more` is `False`.
-
-## Webhooks
-
-Webhooks allow Exact Online to push changes to your application in real-time, rather than polling with `sync()`. When a record is created, updated, or deleted, Exact Online sends an HTTP POST to your endpoint.
-
-> **Note**: The SDK handles webhook validation and parsing. You're responsible for hosting the webhook endpoint (using FastAPI, Flask, etc.) and managing subscriptions via the Exact Online web interface.
-
-### How Webhooks Work
-
-```
-┌─────────────┐                    ┌─────────────────┐
-│ Exact Online│  ──HTTP POST──►   │ Your Web Server │
-│             │   (webhook)        │ (FastAPI/Flask) │
-└─────────────┘                    └─────────────────┘
-```
-
-1. **You** create a webhook subscription in Exact Online's web interface
-2. **Exact Online** sends HTTP POST requests to your URL when changes occur
-3. **Your server** validates the signature and processes the payload using the SDK
-
-### Webhook Payload Structure
-
-Exact Online sends webhooks with this structure:
-
-```json
-{
-  "Content": {
-    "Topic": "PurchaseOrders",
-    "Action": "Update",
-    "Division": 123456,
-    "Key": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "Endpoint": "/api/v1/123456/purchaseorder/PurchaseOrders(guid'...')",
-    "Timestamp": "2024-01-15T14:30:00Z"
-  },
-  "HashCode": "..."
-}
-```
-
-### Validating and Parsing Webhooks
-
-Always validate the signature before processing a webhook to ensure it came from Exact Online:
-
-```python
-from exact_online.webhooks import validate_and_parse, WebhookValidationError
-
-async def handle_webhook(request):
-    payload = await request.body()
-    signature = request.headers.get("X-Exact-Signature", "")
-    
-    try:
-        event = validate_and_parse(payload, signature, webhook_secret)
-        
-        print(f"Received: {event.topic}.{event.action}")
-        print(f"Entity ID: {event.key}")
-        print(f"Division: {event.division}")
-        
-        # Fetch the full entity if needed
-        if event.topic == "PurchaseOrders":
-            order = await client.purchase_orders.get(
-                division=event.division,
-                id=event.key,
-            )
-            # Process the order...
-            
-        return {"status": "ok"}
-        
-    except WebhookValidationError:
-        # Invalid signature - reject the request
-        return {"error": "Invalid signature"}, 401
-```
-
-### Parsing Without Validation
-
-If you handle signature validation separately (e.g., in middleware), you can parse the payload directly:
-
-```python
-from exact_online.webhooks import parse_webhook
-
-event = parse_webhook(payload)
-print(f"{event.topic}.{event.action}: {event.key}")
-```
-
-### Computing Signatures
-
-For testing or if you need to verify signatures manually:
-
-```python
-from exact_online.webhooks import compute_signature, verify_signature
-
-# Compute what the signature should be
-expected = compute_signature(payload_bytes, webhook_secret)
-
-# Or verify directly
-is_valid = verify_signature(payload_bytes, received_signature, webhook_secret)
-```
-
-### WebhookEvent Properties
-
-The parsed `WebhookEvent` contains:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `topic` | `str` | Entity type (e.g., "PurchaseOrders", "Accounts") |
-| `action` | `str` | Change type: "Create", "Update", or "Delete" |
-| `division` | `int` | Division ID where the change occurred |
-| `key` | `str` | GUID of the affected entity |
-| `endpoint` | `str \| None` | API endpoint to fetch the entity |
-| `timestamp` | `datetime \| None` | When the change occurred |
-| `hash_code` | `str \| None` | Exact Online's hash code |
-
-### FastAPI Example
-
-```python
-from fastapi import FastAPI, HTTPException, Request
-from exact_online.webhooks import validate_and_parse, WebhookValidationError
-
-app = FastAPI()
-WEBHOOK_SECRET = "your-secret-from-exact-online"
-
-@app.post("/webhooks/exact")
-async def receive_webhook(request: Request):
-    payload = await request.body()
-    signature = request.headers.get("X-Exact-Signature", "")
-    
-    try:
-        event = validate_and_parse(payload, signature, WEBHOOK_SECRET)
-        
-        if event.topic == "PurchaseOrders":
-            if event.action == "Create":
-                # Handle new order
-                pass
-            elif event.action == "Update":
-                # Handle updated order
-                pass
-            elif event.action == "Delete":
-                # Handle deleted order
-                pass
-        
-        return {"status": "ok"}
-        
-    except WebhookValidationError:
-        raise HTTPException(status_code=401, detail="Invalid signature")
-```
-
-### Setting Up Webhooks
-
-1. Go to the Exact Online web interface
-2. Navigate to your app's settings
-3. Create a webhook subscription for the topics you need (e.g., "PurchaseOrders")
-4. Set the URL to your publicly accessible endpoint
-5. Copy the webhook secret and use it in your application
-
-### Sync vs Webhooks
-
-| Feature | Sync API | Webhooks |
-|---------|----------|----------|
-| **Direction** | Pull (you request data) | Push (data sent to you) |
-| **Timing** | On-demand | Real-time |
-| **Use case** | Batch processing, initial sync | Live updates |
-| **Setup** | Just code | Code + subscription in Exact Online |
-
-For most applications, use **both**: webhooks for real-time updates and sync for initial data load or recovery.
-
-## Batch Operations
-
-The SDK supports Exact Online's `$batch` endpoint for combining multiple requests into a single HTTP call. This is useful for reducing round-trips when you need to perform multiple operations.
-
-> **Source**: [OData Batch Processing](https://www.odata.org/documentation/odata-version-3-0/batch-processing/)
-
-### Building a Batch Request
-
-Use `BatchRequest` to combine multiple GET, POST, PUT, or DELETE operations:
-
-```python
-from exact_online.batch import BatchRequest
-
-batch = BatchRequest(division=123)
-
-# Add multiple operations
-batch.add_get("/purchaseorder/PurchaseOrders", params={"$top": "10"})
-batch.add_get("/crm/Accounts", params={"$top": "5"})
-batch.add_post("/crm/Accounts", {"Name": "New Customer"})
-
-# Execute all at once
-results = await client.execute_batch(batch)
-
-for result in results:
-    if result.success:
-        print(f"Status {result.status_code}: {result.data}")
-    else:
-        print(f"Failed: {result.error}")
-```
-
-### Batch Methods
-
-```python
-# GET requests
-batch.add_get(endpoint, params={"$filter": "Status eq 'Active'"})
-
-# POST requests (create)
-batch.add_post(endpoint, data={"Name": "New Item"})
-
-# PUT requests (update)
-batch.add_put(endpoint, data={"Name": "Updated Item"})
-
-# DELETE requests
-batch.add_delete(endpoint)
-```
-
-### Processing Results
-
-`BatchResult` contains:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `status_code` | `int` | HTTP status code (200, 201, 404, etc.) |
-| `data` | `dict \| None` | Response data for successful requests |
-| `error` | `str \| None` | Error message for failed requests |
-| `success` | `bool` | `True` if status_code < 400 |
-
-### When to Use Batch
-
-- **Good for**: Creating/updating multiple related records, fetching data from multiple endpoints
-- **Not for**: Large data retrieval (use Sync API instead), operations that need individual error handling
-
-## Working with Lines
-
-Order lines (and similar child entities) are separate API resources. They're linked to their parent by a GUID.
+Order lines and similar child entities are separate API resources linked to their parent by a GUID:
 
 ```python
 # Get lines for a specific order
@@ -498,76 +254,236 @@ new_line = await client.purchase_order_lines.create(
 )
 ```
 
-## Rate Limiting
+### Sync API
 
-Exact Online enforces rate limits of 60 requests per minute per division. The SDK automatically tracks rate limits from response headers and waits when approaching the limit—you don't need to handle this yourself.
+Some entities support a bulk sync endpoint that returns up to 1000 records per request (compared to 60 for the standard API). The sync API uses timestamps for incremental syncing, so you only fetch records that changed since your last sync. See the [Exact Online Sync API Documentation](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ReadSyncSyncSyncTimestamp) for details.
 
-> **Source**: [Exact Online API Limits](https://support.exactonline.com/community/s/knowledge-base#All-All-DNO-Simulation-gen-apilimits)
+Start with `timestamp=0` to fetch all records:
 
-## Retry Logic
+```python
+result = await client.purchase_orders.sync(division=123, timestamp=0)
 
-The SDK includes automatic retry logic for transient failures. By default, it retries on:
+print(f"Fetched {len(result.items)} orders")
+print(f"Next timestamp: {result.timestamp}")
+
+# Store result.timestamp in your database for next sync
+```
+
+Use the timestamp from your last sync to only fetch modified records:
+
+```python
+result = await client.purchase_orders.sync(
+    division=123,
+    timestamp=stored_timestamp,
+)
+
+for order in result.items:
+    # Process changed/new orders
+    ...
+
+stored_timestamp = result.timestamp
+```
+
+The `result.has_more` flag indicates if there are more records to fetch. Keep calling with the returned timestamp until `has_more` is `False`.
+
+### Batch requests
+
+The SDK supports Exact Online's `$batch` endpoint for combining multiple requests into a single HTTP call. This reduces round-trips when you need to perform multiple operations. See the [OData Batch Processing](https://www.odata.org/documentation/odata-version-3-0/batch-processing/) documentation for details.
+
+```python
+from exact_online.batch import BatchRequest
+
+batch = BatchRequest(division=123)
+
+batch.add_get("/purchaseorder/PurchaseOrders", params={"$top": "10"})
+batch.add_get("/crm/Accounts", params={"$top": "5"})
+batch.add_post("/crm/Accounts", {"Name": "New Customer"})
+
+results = await client.execute_batch(batch)
+
+for result in results:
+    if result.success:
+        print(f"Status {result.status_code}: {result.data}")
+    else:
+        print(f"Failed: {result.error}")
+```
+
+Available batch methods:
+
+```python
+batch.add_get(endpoint, params={"$filter": "Status eq 'Active'"})
+batch.add_post(endpoint, data={"Name": "New Item"})
+batch.add_put(endpoint, data={"Name": "Updated Item"})
+batch.add_delete(endpoint)
+```
+
+`BatchResult` properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `status_code` | `int` | HTTP status code (200, 201, 404, etc.) |
+| `data` | `dict \| None` | Response data for successful requests |
+| `error` | `str \| None` | Error message for failed requests |
+| `success` | `bool` | `True` if status_code < 400 |
+
+Use batch requests for creating/updating multiple related records or fetching data from multiple endpoints. For large data retrieval, use the Sync API instead.
+
+### Webhooks
+
+Webhooks allow Exact Online to push changes to your application in real-time instead of polling with `sync()`. When a record is created, updated, or deleted, Exact Online sends an HTTP POST to your endpoint. The SDK handles webhook validation and parsing. You are responsible for hosting the webhook endpoint (using FastAPI, Flask, etc.) and managing subscriptions via the Exact Online App Center.
+
+`WebhookEvent` properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `topic` | `str` | Entity type (e.g., "PurchaseOrders", "Accounts") |
+| `action` | `str` | Change type: "Create", "Update", or "Delete" |
+| `division` | `int` | Division ID where the change occurred |
+| `key` | `str` | GUID of the affected entity |
+| `endpoint` | `str \| None` | API endpoint to fetch the entity |
+| `timestamp` | `datetime \| None` | When the change occurred |
+| `hash_code` | `str \| None` | Exact Online's hash code |
+
+Always validate the signature before processing a webhook to ensure it came from Exact Online:
+
+```python
+from exact_online.webhooks import validate_and_parse, WebhookValidationError
+
+async def handle_webhook(request):
+    payload = await request.body()
+    signature = request.headers.get("X-Exact-Signature", "")
+    
+    try:
+        event = validate_and_parse(payload, signature, webhook_secret)
+        
+        print(f"Received: {event.topic}.{event.action}")
+        print(f"Entity ID: {event.key}")
+        
+        if event.topic == "PurchaseOrders":
+            order = await client.purchase_orders.get(
+                division=event.division,
+                id=event.key,
+            )
+            # Process the order
+            
+        return {"status": "ok"}
+        
+    except WebhookValidationError:
+        return {"error": "Invalid signature"}, 401
+```
+
+If you handle signature validation separately (e.g., in middleware), parse the payload directly:
+
+```python
+from exact_online.webhooks import parse_webhook
+
+event = parse_webhook(payload)
+```
+
+For testing or manual signature verification:
+
+```python
+from exact_online.webhooks import compute_signature, verify_signature
+
+expected = compute_signature(payload_bytes, webhook_secret)
+is_valid = verify_signature(payload_bytes, received_signature, webhook_secret)
+```
+
+FastAPI example:
+
+```python
+from fastapi import FastAPI, HTTPException, Request
+from exact_online.webhooks import validate_and_parse, WebhookValidationError
+
+app = FastAPI()
+WEBHOOK_SECRET = "your-secret-from-exact-online"
+
+@app.post("/webhooks/exact")
+async def receive_webhook(request: Request):
+    payload = await request.body()
+    signature = request.headers.get("X-Exact-Signature", "")
+    
+    try:
+        event = validate_and_parse(payload, signature, WEBHOOK_SECRET)
+    except WebhookValidationError:
+        raise HTTPException(status_code=401, detail="Invalid signature")
+    
+    if event.topic == "PurchaseOrders":
+        await handle_purchase_order(event)
+    elif event.topic == "Accounts":
+        await handle_account(event)
+    
+    return {"status": "ok"}
+```
+
+Use webhooks for real-time updates and the sync API for initial data loads or recovery. Most applications benefit from using both: webhooks keep you up-to-date in real-time, while sync provides a reliable way to backfill data or recover from missed webhooks.
+
+## Rate limiting
+
+Exact Online enforces rate limits of 60 requests per minute per division. The SDK tracks rate limits from response headers and waits automatically when approaching the limit. See the [Exact Online API Limits](https://support.exactonline.com/community/s/knowledge-base#All-All-DNO-Simulation-gen-apilimits) documentation for details.
+
+## Retry logic
+
+The SDK retries automatically on transient failures:
 
 - Network errors (connection failures, timeouts)
 - Server errors (5xx responses)
 - Rate limit errors (429)
 
-### Default Behavior
-
-Retry is enabled by default with sensible settings:
+Retry is enabled by default:
 
 ```python
 async with ExactOnlineClient(oauth=oauth) as client:
-    # Automatically retries on transient failures
     orders = await client.purchase_orders.list(division=123)
 ```
 
-### Custom Retry Configuration
-
-You can customize retry behavior:
+Customize retry behavior:
 
 ```python
 from exact_online.retry import RetryConfig
 
-# More aggressive retries
 config = RetryConfig(
-    max_retries=5,           # Max retry attempts (default: 3)
-    base_delay=1.0,          # Initial delay in seconds (default: 0.5)
-    max_delay=60.0,          # Maximum delay cap (default: 30.0)
-    exponential_base=2.0,    # Exponential backoff multiplier (default: 2.0)
-    jitter=True,             # Add randomness to prevent thundering herd (default: True)
+    max_retries=5,
+    base_delay=1.0,
+    max_delay=60.0,
+    exponential_base=2.0,
+    jitter=True,
 )
 
 async with ExactOnlineClient(oauth=oauth, retry_config=config) as client:
     orders = await client.purchase_orders.list(division=123)
 ```
 
-### Disabling Retries
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `max_retries` | 3 | Maximum retry attempts |
+| `base_delay` | 0.5 | Initial delay in seconds |
+| `max_delay` | 30.0 | Maximum delay cap |
+| `exponential_base` | 2.0 | Backoff multiplier |
+| `jitter` | True | Add randomness to prevent thundering herd |
+
+Disable retries:
 
 ```python
 async with ExactOnlineClient(oauth=oauth, retry_config=None) as client:
-    # No automatic retries
     orders = await client.purchase_orders.list(division=123)
 ```
 
-### What Gets Retried
-
 | Error Type | Retried? |
 |------------|----------|
-| Network timeout | ✓ |
-| Connection error | ✓ |
-| 5xx server error | ✓ |
-| 429 rate limit | ✓ |
-| 4xx client error | ✗ |
-| Authentication error | ✗ |
+| Network timeout | Yes |
+| Connection error | Yes |
+| 5xx server error | Yes |
+| 429 rate limit | Yes |
+| 4xx client error | No |
+| Authentication error | No |
 
-## Connection Pooling
+## Connection pooling
 
-The SDK uses `httpx` for HTTP requests, which maintains a connection pool by default. You can customize the timeout:
+The SDK uses `httpx` for HTTP requests, which maintains a connection pool by default. Customize the timeout:
 
 ```python
 async with ExactOnlineClient(oauth=oauth, timeout=60.0) as client:
-    # Requests have a 60-second timeout (default is 30)
     orders = await client.purchase_orders.list(division=123)
 ```
 
@@ -587,38 +503,29 @@ http_client = httpx.AsyncClient(
 async with ExactOnlineClient(oauth=oauth, http_client=http_client) as client:
     orders = await client.purchase_orders.list(division=123)
 
-# Remember to close your custom client when done
 await http_client.aclose()
 ```
 
-## API Restrictions
+## Restrictions
 
-Beyond rate limits, Exact Online enforces several restrictions you should be aware of.
+Beyond rate limits, Exact Online enforces several restrictions. See the [REST API Restrictions](https://support.exactonline.com/community/s/knowledge-base#All-All-DNO-Content-rest-restrictions) documentation for details.
 
-> **Source**: [REST API Restrictions](https://support.exactonline.com/community/s/knowledge-base#All-All-DNO-Content-rest-restrictions)
+**Sequential requests only**: Do not use multi-threaded or parallel requests. Exact Online expects requests to be made sequentially. Concurrent requests violate their Fair Use Policy and may result in suspended access.
 
-### Sequential Requests Only
+**Pagination limits**: Standard CRUD endpoints return a maximum of 60 records per request. For larger datasets, use pagination with `list_next()` or the Sync API with timestamps.
 
-Do not use multi-threaded or parallel requests. Exact Online expects requests to be made sequentially. Attempting to speed up data retrieval with concurrent requests violates their Fair Use Policy and may result in your access being suspended.
+**Content length limits**:
 
-### Pagination Limits
+| Region | Max Size |
+|--------|----------|
+| Netherlands, Belgium | 38 MB |
+| All other regions | 9.5 MB |
 
-Standard CRUD endpoints return a maximum of 60 records per request. For larger datasets, use pagination with `list_next()` or—preferably—the Sync API with timestamps. The Sync API is specifically designed for bulk data retrieval without violating fair use policies.
+**URL length limits**: URLs are limited to 6000 characters. Be careful with complex OData filters, as URL encoding expands special characters (spaces become `%20`, etc.).
 
-### Content Length Limits
+## Errors
 
-The maximum request/response size depends on your region:
-
-- **Netherlands & Belgium**: 38 MB
-- **All other regions**: 9.5 MB
-
-### URL Length Limits
-
-URLs are limited to 6000 characters. Be careful with complex OData filters, as URL encoding expands special characters (spaces become `%20`, etc.). A filter that looks short may exceed the limit after encoding.
-
-## Error Handling
-
-The SDK raises specific exceptions for different failure modes, allowing you to handle each case appropriately.
+The SDK raises specific exceptions for different failure modes:
 
 ```python
 from exact_online import (
@@ -631,83 +538,67 @@ from exact_online import (
 )
 ```
 
-Example error handling:
+Example:
 
 ```python
 try:
     orders = await client.purchase_orders.list(division=123)
 except TokenExpiredError:
-    # Refresh token is invalid/expired
-    # Redirect user to re-authenticate
     redirect_to_login()
 except RateLimitError:
-    # Shouldn't happen often as SDK auto-waits
-    # But handle just in case
     await asyncio.sleep(60)
 except APIError as e:
-    # API returned an error response
     print(f"API error {e.status_code}: {e}")
 ```
 
-## Important Notes
-
-**Token Expiry Timezone**: The SDK uses UTC for all datetime operations. When implementing `TokenStorage`, store `expires_at` as a timezone-aware datetime in UTC. Using naive datetimes or local times will cause token refresh logic to fail.
-
-**Field Names**: When creating or updating records, use Exact Online's PascalCase field names (e.g., `PurchaseOrderID`, not `purchase_order_id`). The SDK's Pydantic models use snake_case for Python, but the API expects PascalCase.
-
-## Available Resources
+## Resources
 
 | Resource | Endpoint | CRUD | Sync | Documentation |
 |----------|----------|------|------|---------------|
-| Me (Current User) | `client.me` | — | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=SystemSystemMe) |
-| Accounts | `client.accounts` | ✓ | ✓ | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=CRMAccounts) |
-| Bill of Material Materials | `client.bill_of_material_materials` | ✓ | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ManufacturingBillOfMaterialMaterials) |
-| Item Extra Fields | `client.item_extra_fields` | Custom | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ReadLogisticsItemExtraField) |
-| Item Warehouses | `client.item_warehouses` | ✓ | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=InventoryItemWarehouses) |
-| Items | `client.items` | ✓ | ✓ | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=LogisticsItems) |
-| Payables List | `client.payables_list` | ✓ | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ReadFinancialPayablesList) |
-| Purchase Invoices | `client.purchase_invoices` | ✓ | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=PurchasePurchaseInvoices) |
-| Purchase Item Prices | `client.purchase_item_prices` | — | ✓ | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=SyncLogisticsPurchaseItemPrices) |
-| Purchase Order Lines | `client.purchase_order_lines` | ✓ | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=PurchaseOrderPurchaseOrderLines) |
-| Purchase Orders | `client.purchase_orders` | ✓ | ✓ | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=PurchaseOrderPurchaseOrders) |
-| Receivables List | `client.receivables_list` | ✓ | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ReadFinancialReceivablesList) |
-| Reporting Balance | `client.reporting_balance` | ✓ | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=FinancialReportingBalance) |
-| Sales Item Prices | `client.sales_item_prices` | ✓ | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=LogisticsSalesItemPrices) |
-| Sales Orders | `client.sales_orders` | ✓ | ✓ | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=SalesOrderSalesOrders) |
-| Shop Orders | `client.shop_orders` | ✓ | ✓ | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ManufacturingShopOrders) |
-| Stock Count Lines | `client.stock_count_lines` | ✓ | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=InventoryStockCountLines) |
-| Supplier Items | `client.supplier_items` | ✓ | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=LogisticsSupplierItem) |
-| Warehouse Transfers | `client.warehouse_transfers` | ✓ | — | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=InventoryWarehouseTransfers) |
+| Me (Current User) | `client.me` | - | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=SystemSystemMe) |
+| Accounts | `client.accounts` | Yes | Yes | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=CRMAccounts) |
+| Bill of Material Materials | `client.bill_of_material_materials` | Yes | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ManufacturingBillOfMaterialMaterials) |
+| Item Extra Fields | `client.item_extra_fields` | Custom | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ReadLogisticsItemExtraField) |
+| Item Warehouses | `client.item_warehouses` | Yes | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=InventoryItemWarehouses) |
+| Items | `client.items` | Yes | Yes | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=LogisticsItems) |
+| Payables List | `client.payables_list` | Yes | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ReadFinancialPayablesList) |
+| Purchase Invoices | `client.purchase_invoices` | Yes | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=PurchasePurchaseInvoices) |
+| Purchase Item Prices | `client.purchase_item_prices` | - | Yes | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=SyncLogisticsPurchaseItemPrices) |
+| Purchase Order Lines | `client.purchase_order_lines` | Yes | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=PurchaseOrderPurchaseOrderLines) |
+| Purchase Orders | `client.purchase_orders` | Yes | Yes | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=PurchaseOrderPurchaseOrders) |
+| Receivables List | `client.receivables_list` | Yes | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ReadFinancialReceivablesList) |
+| Reporting Balance | `client.reporting_balance` | Yes | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=FinancialReportingBalance) |
+| Sales Item Prices | `client.sales_item_prices` | Yes | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=LogisticsSalesItemPrices) |
+| Sales Orders | `client.sales_orders` | Yes | Yes | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=SalesOrderSalesOrders) |
+| Shop Orders | `client.shop_orders` | Yes | Yes | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ManufacturingShopOrders) |
+| Stock Count Lines | `client.stock_count_lines` | Yes | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=InventoryStockCountLines) |
+| Supplier Items | `client.supplier_items` | Yes | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=LogisticsSupplierItem) |
+| Warehouse Transfers | `client.warehouse_transfers` | Yes | - | [Docs](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=InventoryWarehouseTransfers) |
 
-### Special Endpoints
+### Item extra fields
 
-#### Item Extra Fields (Function Endpoint)
-
-The Item Extra Fields API is a function endpoint that requires specific parameters. Unlike standard CRUD endpoints, it only supports a `get_for_item()` method:
+The Item Extra Fields API is a function endpoint that requires specific parameters. Unlike standard CRUD endpoints, it only supports `get_for_item()`. See the [Item Extra Fields Documentation](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=ReadLogisticsItemExtraField) for details.
 
 ```python
 from datetime import datetime
 
-# Get extra fields for a specific item
 fields = await client.item_extra_fields.get_for_item(
     division=123,
     item_id="item-guid",
-    modified=datetime(2024, 1, 1)  # Item's modified date
+    modified=datetime(2024, 1, 1)
 )
 
 for field in fields:
     print(f"FreeField{field.number}: {field.value}")
 ```
 
-#### Purchase Item Prices (Sync-Only)
+### Purchase item prices
 
-The Purchase Item Prices API only supports bulk sync operations—no CRUD operations are available. Use `sync()` to retrieve purchase prices:
+The Purchase Item Prices API only supports bulk sync operations. See the [Purchase Item Prices Documentation](https://start.exactonline.nl/docs/HlpRestAPIResourcesDetails.aspx?name=SyncLogisticsPurchaseItemPrices) for details.
 
 ```python
-# Initial sync (get all purchase item prices)
 result = await client.purchase_item_prices.sync(division=123, timestamp=0)
 
-# Incremental sync (get changes since last sync)
 result = await client.purchase_item_prices.sync(
     division=123,
     timestamp=stored_timestamp
@@ -717,35 +608,10 @@ for price in result.items:
     print(f"{price.item_code}: {price.price} {price.currency}")
 ```
 
-> **Note**: Only timestamp filtering is supported for optimal performance. Do not use `$select=*`.
+Only timestamp filtering is supported for optimal performance. Do not use `$select=*`.
 
-## Development
+## Notes
 
-### Running Tests
+**Token expiry timezone**: The SDK uses UTC for all datetime operations. When implementing `TokenStorage`, store `expires_at` as a timezone-aware datetime in UTC. Using naive datetimes or local times will cause token refresh logic to fail.
 
-The SDK includes a comprehensive test suite using pytest with async support and HTTP mocking.
-
-```bash
-# Install dev dependencies
-uv sync --group dev
-
-# Run all tests
-uv run pytest tests/ -v
-
-# Run with coverage
-uv run pytest tests/ --cov=exact_online
-```
-
-### Code Quality
-
-The SDK enforces strict type checking and linting.
-
-```bash
-# Run linter
-uv run ruff check src/ tests/
-
-# Run type checker
-uv run mypy src/ tests/
-```
-
-Both should pass with no errors.
+**Field names**: When creating or updating records, use Exact Online's PascalCase field names (e.g., `PurchaseOrderID`, not `purchase_order_id`). The SDK's Pydantic models use snake_case for Python, but the API expects PascalCase.
