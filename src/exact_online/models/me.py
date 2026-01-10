@@ -35,7 +35,6 @@ class Me(ExactBaseModel):
     division_customer_name: str | None = Field(
         default=None, alias="DivisionCustomerName"
     )
-
     user_divisions: list[UserDivision] | None = Field(
         default=None, alias="UserDivisions"
     )
