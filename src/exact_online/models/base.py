@@ -20,12 +20,10 @@ def parse_odata_datetime(value: Any) -> Any:
     if isinstance(value, datetime):
         return value
     if isinstance(value, str):
-        # Match /Date(1234567890000)/ format
         match = re.match(r"/Date\((\d+)\)/", value)
         if match:
             milliseconds = int(match.group(1))
             return datetime.fromtimestamp(milliseconds / 1000, tz=UTC)
-        # Try standard ISO format as fallback
         try:
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
@@ -33,7 +31,6 @@ def parse_odata_datetime(value: Any) -> Any:
     return value
 
 
-# Custom datetime type that handles OData format
 ODataDateTime = Annotated[datetime | None, BeforeValidator(parse_odata_datetime)]
 
 
