@@ -8,17 +8,16 @@ from typing import TYPE_CHECKING, cast
 from exact_online.models.item_extra_field import ItemExtraField
 
 if TYPE_CHECKING:
-    from exact_online.client import ExactOnlineClient
+    from exact_online.client import Client
 
 
 class ItemExtraFieldsAPI:
     """API resource for Item Extra Fields.
 
     This is a function endpoint - only get_for_item() is available.
-    No CRUD or sync operations are supported.
+    No CRUD or sync operations are supported (bulk, up to 1000 records).
 
     Usage:
-        # Get extra fields for an item
         fields = await client.item_extra_fields.get_for_item(
             division=123,
             item_id="item-guid",
@@ -31,7 +30,7 @@ class ItemExtraFieldsAPI:
 
     ENDPOINT = "/read/logistics/ItemExtraField"
 
-    def __init__(self, client: ExactOnlineClient) -> None:
+    def __init__(self, client: Client) -> None:
         """Initialize the API resource."""
         self._client = client
 

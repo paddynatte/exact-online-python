@@ -23,7 +23,6 @@ Example:
             raise HTTPException(status_code=401, detail=str(e))
 
         print(f"Received {event.action} on {event.topic}: {event.key}")
-        # Process the webhook event...
         return {"status": "ok"}
     ```
 """

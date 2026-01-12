@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from exact_online.models.me import Me
 
 if TYPE_CHECKING:
-    from exact_online.client import ExactOnlineClient
+    from exact_online.client import Client
 
 
 class MeAPI:
@@ -25,11 +25,11 @@ class MeAPI:
             print(f"  Division {div.division}: {div.description}")
     """
 
-    def __init__(self, client: ExactOnlineClient) -> None:
+    def __init__(self, client: Client) -> None:
         """Initialize the API resource.
 
         Args:
-            client: The ExactOnlineClient instance.
+            client: The Client instance.
         """
         self._client = client
 

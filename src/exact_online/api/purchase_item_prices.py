@@ -9,22 +9,20 @@ from exact_online.models.base import SyncResult
 from exact_online.models.purchase_item_price import PurchaseItemPrice
 
 if TYPE_CHECKING:
-    from exact_online.client import ExactOnlineClient
+    from exact_online.client import Client
 
 
 class PurchaseItemPricesAPI:
     """API resource for Purchase Item Prices.
 
     This is a sync-only API - no CRUD operations are available.
-    Use sync() to retrieve purchase prices.
+    Use sync() to retrieve purchase prices (bulk, up to 1000 records).
 
     Note: Does not support $select=* due to large number of properties.
 
     Usage:
-        # Initial sync (get all)
         result = await client.purchase_item_prices.sync(division=123, timestamp=0)
 
-        # Incremental sync
         result = await client.purchase_item_prices.sync(
             division=123,
             timestamp=stored_timestamp
@@ -33,7 +31,7 @@ class PurchaseItemPricesAPI:
 
     SYNC_ENDPOINT = "/sync/Logistics/PurchaseItemPrices"
 
-    def __init__(self, client: ExactOnlineClient) -> None:
+    def __init__(self, client: Client) -> None:
         """Initialize the API resource."""
         self._client = client
 

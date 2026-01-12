@@ -3,10 +3,10 @@
 A Python SDK for interacting with the Exact Online API.
 """
 
-from exact_online.auth import OAuthManager, TokenData, TokenStorage
+from exact_online.auth import OAuth, TokenData, TokenStorage
 from exact_online.batch import BatchRequest, BatchResponse, BatchResult
-from exact_online.client import ExactOnlineClient
-from exact_online.constants import ExactRegion
+from exact_online.client import Client
+from exact_online.constants import Region
 from exact_online.exceptions import (
     APIError,
     AuthenticationError,
@@ -57,15 +57,14 @@ __all__ = [
     "BatchResponse",
     "BatchResult",
     "BillOfMaterialMaterial",
-    "ExactOnlineClient",
+    "Client",
     "ExactOnlineError",
-    "ExactRegion",
     "Item",
     "ItemExtraField",
     "ItemWarehouse",
     "ListResult",
     "Me",
-    "OAuthManager",
+    "OAuth",
     "ODataDateTime",
     "parse_webhook",
     "PayablesListItem",
@@ -75,6 +74,7 @@ __all__ = [
     "PurchaseOrderLine",
     "RateLimitError",
     "ReceivablesListItem",
+    "Region",
     "ReportingBalance",
     "RetryConfig",
     "SalesItemPrice",

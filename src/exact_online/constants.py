@@ -3,7 +3,7 @@
 from enum import StrEnum
 
 
-class ExactRegion(StrEnum):
+class Region(StrEnum):
     """Exact Online regional endpoints."""
 
     NL = "nl"

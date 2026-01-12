@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from exact_online.models.base import ListResult, SyncResult
 
 if TYPE_CHECKING:
-    from exact_online.client import ExactOnlineClient
+    from exact_online.client import Client
 
 
 class BaseAPI[TModel: BaseModel]:
@@ -26,11 +26,11 @@ class BaseAPI[TModel: BaseModel]:
     MODEL: ClassVar[type[BaseModel]]
     ID_FIELD: ClassVar[str] = "ID"
 
-    def __init__(self, client: ExactOnlineClient) -> None:
+    def __init__(self, client: Client) -> None:
         """Initialize the API resource.
 
         Args:
-            client: The ExactOnlineClient instance.
+            client: The Client instance.
         """
         self._client = client
 

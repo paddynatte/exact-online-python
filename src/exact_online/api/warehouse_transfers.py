@@ -9,18 +9,15 @@ from exact_online.models.warehouse_transfer import WarehouseTransfer
 class WarehouseTransfersAPI(BaseAPI[WarehouseTransfer]):
     """API resource for Warehouse Transfers.
 
-    Manage warehouse and location transfers.
+    Manage warehouse and location transfers (bulk, up to 1000 records).
 
     When WarehouseFrom equals WarehouseTo, it's a location transfer.
 
     Usage:
-        # List transfers
         transfers = await client.warehouse_transfers.list(division=123)
 
-        # Get specific transfer
         transfer = await client.warehouse_transfers.get(division=123, id="guid")
 
-        # Create warehouse transfer
         transfer = await client.warehouse_transfers.create(
             division=123,
             data={

@@ -14,7 +14,6 @@ class ReportingBalanceAPI(BaseAPI[ReportingBalance]):
     Note: For optimal performance, only include reporting year in filters.
 
     Usage:
-        # List reporting balances (filter by year for best performance)
         balances = await client.reporting_balance.list(
             division=123,
             odata_filter="ReportingYear eq 2024"

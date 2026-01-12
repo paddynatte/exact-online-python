@@ -4,13 +4,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from exact_online import ExactRegion, TokenData
+from exact_online import Region, TokenData
 
 
 @pytest.fixture
-def region() -> ExactRegion:
+def region() -> Region:
     """Default region for tests."""
-    return ExactRegion.NL
+    return Region.NL
 
 
 @pytest.fixture

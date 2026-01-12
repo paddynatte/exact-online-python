@@ -9,16 +9,13 @@ from exact_online.models.item_warehouse import ItemWarehouse
 class ItemWarehousesAPI(BaseAPI[ItemWarehouse]):
     """API resource for Item Warehouses.
 
-    Link items to warehouses with stock level information.
+    Link items to warehouses with stock level information (bulk, up to 1000 records).
 
     Usage:
-        # List item-warehouse links
         links = await client.item_warehouses.list(division=123)
 
-        # Get stock for specific item in warehouse
         link = await client.item_warehouses.get(division=123, id="guid")
 
-        # Create item-warehouse link
         link = await client.item_warehouses.create(
             division=123,
             data={"Item": "item-guid", "Warehouse": "warehouse-guid"}

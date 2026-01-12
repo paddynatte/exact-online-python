@@ -9,13 +9,11 @@ from exact_online.models.receivables_list import ReceivablesListItem
 class ReceivablesListAPI(BaseAPI[ReceivablesListItem]):
     """API resource for Receivables List.
 
-    Get customer payment terms information (Outstanding items report data).
+    Get customer payment terms information (Outstanding items report data) (bulk, up to 1000 records).
 
     Usage:
-        # List receivables
         receivables = await client.receivables_list.list(division=123)
 
-        # Filter by due date
         receivables = await client.receivables_list.list(
             division=123,
             odata_filter="DueDate lt datetime'2024-12-31'"

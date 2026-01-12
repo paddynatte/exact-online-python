@@ -38,8 +38,8 @@ class ExactBaseModel(BaseModel):
     """Base model with common configuration for all Exact Online entities."""
 
     model_config = ConfigDict(
-        populate_by_name=True,  # Allow both alias and field name
-        extra="ignore",  # Ignore unknown fields from API
+        populate_by_name=True,
+        extra="ignore",
     )
 
 

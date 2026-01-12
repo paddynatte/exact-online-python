@@ -4,9 +4,9 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from exact_online import (
-    ExactOnlineClient,
-    ExactRegion,
-    OAuthManager,
+    Client,
+    OAuth,
+    Region,
     TokenData,
 )
 from exact_online.batch import (
@@ -22,10 +22,10 @@ from .conftest import MockTokenStorage
 
 
 @pytest.fixture
-def oauth_manager(valid_token_data: TokenData, region: ExactRegion) -> OAuthManager:
-    """OAuthManager with valid tokens."""
+def oauth(valid_token_data: TokenData, region: Region) -> OAuth:
+    """OAuth with valid tokens."""
     storage = MockTokenStorage(initial_tokens=valid_token_data)
-    return OAuthManager(
+    return OAuth(
         client_id="test_client_id",
         client_secret="test_client_secret",
         redirect_uri="https://example.com/callback",
@@ -35,9 +35,9 @@ def oauth_manager(valid_token_data: TokenData, region: ExactRegion) -> OAuthMana
 
 
 @pytest.fixture
-async def client(oauth_manager: OAuthManager) -> ExactOnlineClient:  # type: ignore[misc]
-    """ExactOnlineClient for testing."""
-    async with ExactOnlineClient(oauth=oauth_manager, retry=False) as c:
+async def client(oauth: OAuth) -> Client:  # type: ignore[misc]
+    """Client for testing."""
+    async with Client(oauth=oauth, retry=False) as c:
         yield c
 
 
@@ -217,7 +217,7 @@ class TestBuildBatchBody:
         )
 
         assert "$top=5" in body
-        assert "$filter=Status%20eq%2010" in body  # URL-encoded
+        assert "$filter=Status%20eq%2010" in body
 
 
 class TestParseBatchResponse:
@@ -264,14 +264,14 @@ class TestExecuteBatch:
     """Tests for execute_batch function."""
 
     async def test_empty_requests_raises(
-        self, client: ExactOnlineClient
+        self, client: Client
     ) -> None:
         """Should raise ValueError for empty requests list."""
         with pytest.raises(ValueError, match="cannot be empty"):
             await execute_batch(client, [])
 
     async def test_execute_get_requests(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """Should execute GET requests in batch."""
         httpx_mock.add_response(
@@ -297,7 +297,7 @@ Content-Type: application/json
         assert result.responses[0].is_success
 
     async def test_client_batch_method(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """Should be callable via client.batch()."""
         httpx_mock.add_response(

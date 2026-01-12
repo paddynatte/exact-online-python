@@ -9,16 +9,13 @@ from exact_online.models.supplier_item import SupplierItem
 class SupplierItemsAPI(BaseAPI[SupplierItem]):
     """API resource for Supplier Items.
 
-    Links suppliers to items and manages purchase prices.
+    Links suppliers to items and manages purchase prices (bulk, up to 1000 records).
 
-    Usage:
-        # List supplier items
+    Usage:  
         items = await client.supplier_items.list(division=123)
 
-        # Get specific supplier item
         item = await client.supplier_items.get(division=123, id="guid")
 
-        # Create supplier item link
         item = await client.supplier_items.create(
             division=123,
             data={"Item": "item-guid", "Supplier": "supplier-guid"}

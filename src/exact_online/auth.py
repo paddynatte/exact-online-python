@@ -5,12 +5,11 @@ import logging
 from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Any, Protocol
-from urllib.parse import urlencode
 
 import httpx
 from pydantic import BaseModel
 
-from exact_online.constants import ExactRegion
+from exact_online.constants import Region
 from exact_online.exceptions import (
     TokenExpiredError,
     TokenRefreshError,
@@ -76,11 +75,9 @@ class TokenStorage(Protocol):
     Example:
         class MyTokenStorage:
             async def get_tokens(self) -> TokenData | None:
-                # Load from your database
                 ...
 
             async def save_tokens(self, tokens: TokenData) -> None:
-                # Save to your database
                 ...
     """
 
@@ -93,11 +90,10 @@ class TokenStorage(Protocol):
         ...
 
 
-class OAuthManager:
+class OAuth:
     """Manages OAuth authentication for Exact Online.
 
     Handles:
-    - Authorization URL generation
     - Code exchange for tokens
     - Automatic token refresh with rotation handling
     - Thread-safe refresh with async lock
@@ -108,11 +104,11 @@ class OAuthManager:
         client_id: str,
         client_secret: str,
         redirect_uri: str,
-        region: ExactRegion,
+        region: Region,
         token_storage: TokenStorage,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        """Initialize the OAuth manager.
+        """Initialize the OAuth handler.
 
         Args:
             client_id: Your Exact Online app client ID.
@@ -138,34 +134,7 @@ class OAuthManager:
             self._http_client = httpx.AsyncClient(timeout=30.0)
         return self._http_client
 
-    def get_authorization_url(
-        self,
-        state: str | None = None,
-        scope: str | None = None,
-    ) -> str:
-        """Generate the OAuth authorization URL.
-
-        Args:
-            state: Optional state parameter for CSRF protection.
-            scope: Optional scope (not typically used by Exact Online).
-
-        Returns:
-            The full authorization URL to redirect the user to.
-        """
-        params = {
-            "client_id": self.client_id,
-            "redirect_uri": self.redirect_uri,
-            "response_type": "code",
-        }
-
-        if state:
-            params["state"] = state
-        if scope:
-            params["scope"] = scope
-
-        return f"{self.region.auth_url}?{urlencode(params)}"
-
-    async def exchange_code(self, code: str) -> TokenData:
+    async def exchange(self, code: str) -> TokenData:
         """Exchange an authorization code for tokens.
 
         This is called after the user authorizes your app and is redirected
@@ -204,8 +173,8 @@ class OAuthManager:
         logger.debug("Successfully exchanged authorization code for tokens")
         return tokens
 
-    async def ensure_valid_token(self) -> str:
-        """Ensure we have a valid access token, refreshing if needed.
+    async def get_token(self) -> str:
+        """Get a valid access token, refreshing if needed.
 
         This method is thread-safe and handles concurrent refresh attempts.
 
@@ -285,7 +254,7 @@ class OAuthManager:
             await self._http_client.aclose()
             self._http_client = None
 
-    async def __aenter__(self) -> "OAuthManager":
+    async def __aenter__(self) -> "OAuth":
         """Async context manager entry."""
         return self
 

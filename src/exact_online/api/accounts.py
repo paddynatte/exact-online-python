@@ -9,25 +9,21 @@ from exact_online.models.account import Account
 class AccountsAPI(BaseAPI[Account]):
     """API resource for Accounts (customers, suppliers, relations).
 
-    Supports full CRUD operations and sync.
+    Supports full CRUD operations and sync (bulk, up to 1000 records).
 
     Usage:
-        # List all accounts
         accounts = await client.accounts.list(division=123)
 
-        # List only suppliers
         suppliers = await client.accounts.list(
             division=123,
             odata_filter="IsSupplier eq true",
         )
 
-        # List only customers
         customers = await client.accounts.list(
             division=123,
             odata_filter="IsSales eq true",
         )
 
-        # Sync (bulk, up to 1000 records)
         result = await client.accounts.sync(division=123, timestamp=0)
     """
 

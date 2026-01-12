@@ -6,9 +6,9 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from exact_online import (
-    ExactOnlineClient,
-    ExactRegion,
-    OAuthManager,
+    Client,
+    OAuth,
+    Region,
     TokenData,
 )
 from exact_online.models.base import (
@@ -21,10 +21,10 @@ from .conftest import MockTokenStorage
 
 
 @pytest.fixture
-def oauth_manager(valid_token_data: TokenData, region: ExactRegion) -> OAuthManager:
-    """OAuthManager with valid tokens."""
+def oauth(valid_token_data: TokenData, region: Region) -> OAuth:
+    """OAuth with valid tokens."""
     storage = MockTokenStorage(initial_tokens=valid_token_data)
-    return OAuthManager(
+    return OAuth(
         client_id="test_client_id",
         client_secret="test_client_secret",
         redirect_uri="https://example.com/callback",
@@ -34,9 +34,9 @@ def oauth_manager(valid_token_data: TokenData, region: ExactRegion) -> OAuthMana
 
 
 @pytest.fixture
-async def client(oauth_manager: OAuthManager) -> ExactOnlineClient:  # type: ignore[misc]
-    """ExactOnlineClient for testing."""
-    async with ExactOnlineClient(oauth=oauth_manager) as c:
+async def client(oauth: OAuth) -> Client:  # type: ignore[misc]
+    """Client for testing."""
+    async with Client(oauth=oauth) as c:
         yield c
 
 
@@ -89,7 +89,7 @@ class TestBaseAPIList:
     """Tests for BaseAPI.list() method."""
 
     async def test_list_returns_list_result(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """list() should return a ListResult."""
         httpx_mock.add_response(
@@ -114,7 +114,7 @@ class TestBaseAPIList:
         assert result.has_more is False
 
     async def test_list_with_filter(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """list() should pass OData filter."""
         httpx_mock.add_response(
@@ -128,11 +128,10 @@ class TestBaseAPIList:
 
         request = httpx_mock.get_request()
         assert request is not None
-        # OData params should have literal $ (not URL-encoded %24)
         assert "$filter" in str(request.url)
 
     async def test_list_pagination(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """list() should return next_url for pagination."""
         next_url = "https://start.exactonline.nl/api/v1/123/purchaseorder/PurchaseOrders?$skiptoken=guid'abc'"
@@ -160,7 +159,7 @@ class TestBaseAPISync:
     """Tests for BaseAPI.sync() method."""
 
     async def test_sync_returns_sync_result(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """sync() should return a SyncResult."""
         httpx_mock.add_response(
@@ -184,7 +183,7 @@ class TestBaseAPISync:
         assert result.has_more is False
 
     async def test_sync_handles_null_timestamp(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """sync() should handle null Timestamp values without crashing."""
         httpx_mock.add_response(
@@ -194,7 +193,7 @@ class TestBaseAPISync:
                         {
                             "PurchaseOrderID": "44444444-4444-4444-4444-444444444444",
                             "Supplier": "00000000-0000-0000-0000-000000000001",
-                            "Timestamp": None,  # null timestamp
+                            "Timestamp": None,
                         },
                         {
                             "PurchaseOrderID": "55555555-5555-5555-5555-555555555555",
@@ -206,16 +205,14 @@ class TestBaseAPISync:
             },
         )
 
-        # This should NOT raise TypeError
         result = await client.purchase_orders.sync(division=123, timestamp=0)
 
-        assert result.timestamp == 99999  # Should get the valid timestamp
+        assert result.timestamp == 99999
 
     async def test_sync_has_more_when_1000_results(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """sync() should set has_more=True when 1000 results returned."""
-        # Create 1000 fake results
         results = [
             {
                 "PurchaseOrderID": f"00000000-0000-0000-0000-{i:012d}",
@@ -236,7 +233,7 @@ class TestRateLimiter:
     """Tests for rate limiting."""
 
     async def test_rate_limit_headers_case_insensitive(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """Rate limiter should handle lowercase headers."""
         httpx_mock.add_response(
@@ -249,7 +246,6 @@ class TestRateLimiter:
 
         await client.purchase_orders.list(division=123)
 
-        # Should not crash and should update rate limiter
         remaining = client._rate_limiter.get_remaining(123)
         assert remaining == 45
 
@@ -291,10 +287,9 @@ class TestListNextWithListFormat:
     """Tests for list_next handling list response format."""
 
     async def test_list_next_handles_list_format(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """list_next() should handle when d is a list."""
-        # Add first response with next_url
         next_url = "https://start.exactonline.nl/api/v1/123/purchaseorder/PurchaseOrders?$skiptoken=guid'abc'"
         httpx_mock.add_response(
             json={
@@ -309,7 +304,6 @@ class TestListNextWithListFormat:
                 }
             },
         )
-        # Add second response with list format
         httpx_mock.add_response(
             json={
                 "d": [
@@ -325,7 +319,6 @@ class TestListNextWithListFormat:
         assert result.has_more is True
         assert result.next_url is not None
 
-        # This should not crash
         result2 = await client.purchase_orders.list_next(result.next_url, division=123)
         assert len(result2) == 1
         assert result2.has_more is False
@@ -359,17 +352,17 @@ class TestTimeoutConfig:
     """Tests for timeout configuration."""
 
     async def test_default_timeout(
-        self, oauth_manager: OAuthManager
+        self, oauth: OAuth
     ) -> None:
         """Client should use default timeout."""
-        async with ExactOnlineClient(oauth=oauth_manager) as client:
+        async with Client(oauth=oauth) as client:
             assert client._timeout == 30.0
 
     async def test_custom_timeout(
-        self, oauth_manager: OAuthManager
+        self, oauth: OAuth
     ) -> None:
         """Client should use custom timeout."""
-        async with ExactOnlineClient(oauth=oauth_manager, timeout=60.0) as client:
+        async with Client(oauth=oauth, timeout=60.0) as client:
             assert client._timeout == 60.0
 
 
@@ -377,7 +370,7 @@ class TestListAll:
     """Tests for list_all() auto-pagination."""
 
     async def test_list_all_single_page(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """list_all() should yield all items from single page."""
         httpx_mock.add_response(
@@ -405,11 +398,10 @@ class TestListAll:
         assert len(items) == 2
 
     async def test_list_all_multiple_pages(
-        self, client: ExactOnlineClient, httpx_mock: HTTPXMock
+        self, client: Client, httpx_mock: HTTPXMock
     ) -> None:
         """list_all() should auto-paginate through multiple pages."""
         next_url = "https://start.exactonline.nl/api/v1/123/purchaseorder/PurchaseOrders?$skiptoken=guid'abc'"
-        # First page
         httpx_mock.add_response(
             json={
                 "d": {
@@ -423,7 +415,6 @@ class TestListAll:
                 }
             },
         )
-        # Second page
         httpx_mock.add_response(
             json={
                 "d": {

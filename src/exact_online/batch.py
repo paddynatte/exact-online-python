@@ -14,7 +14,7 @@ from exact_online.exceptions import APIError
 from exact_online.retry import RetryableError, with_retry
 
 if TYPE_CHECKING:
-    from exact_online.client import ExactOnlineClient
+    from exact_online.client import Client
 
 logger = logging.getLogger("exact_online.batch")
 
@@ -283,7 +283,7 @@ def _parse_batch_response(response_text: str, boundary: str) -> list[BatchRespon
 
 
 async def execute_batch(
-    client: ExactOnlineClient,
+    client: Client,
     requests: list[BatchRequest],
 ) -> BatchResult:
     """Execute multiple requests in a single HTTP call using OData $batch.
@@ -293,7 +293,7 @@ async def execute_batch(
     operations (POST, PUT, DELETE) are grouped in a changeset for atomicity.
 
     Args:
-        client: ExactOnlineClient instance.
+        client: Client instance.
         requests: List of BatchRequest objects to execute.
 
     Returns:
@@ -323,7 +323,7 @@ async def execute_batch(
     base_url = client.oauth.region.api_url
 
     async def do_batch() -> BatchResult:
-        access_token = await client.oauth.ensure_valid_token()
+        access_token = await client.oauth.get_token()
         content_type, body = _build_batch_body(requests, base_url)
 
         http = await client._get_http_client()

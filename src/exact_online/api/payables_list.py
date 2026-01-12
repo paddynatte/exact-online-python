@@ -9,13 +9,11 @@ from exact_online.models.payables_list import PayablesListItem
 class PayablesListAPI(BaseAPI[PayablesListItem]):
     """API resource for Payables List.
 
-    Get supplier payment terms information (Outstanding items report data).
+    Get supplier payment terms information (Outstanding items report data) (bulk, up to 1000 records).
 
     Usage:
-        # List payables
         payables = await client.payables_list.list(division=123)
 
-        # Filter by due date
         payables = await client.payables_list.list(
             division=123,
             odata_filter="DueDate lt datetime'2024-12-31'"

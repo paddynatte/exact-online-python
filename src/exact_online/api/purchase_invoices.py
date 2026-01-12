@@ -9,22 +9,19 @@ from exact_online.models.purchase_invoice import PurchaseInvoice
 class PurchaseInvoicesAPI(BaseAPI[PurchaseInvoice]):
     """API resource for Purchase Invoices.
 
-    Manage purchase invoices and direct purchase invoices.
+    Manage purchase invoices and direct purchase invoices (bulk, up to 1000 records).
 
     Direct purchase invoices combine invoice and receipt - no purchase order needed.
     To create a direct purchase invoice, specify the receiving warehouse.
 
     Usage:
-        # List purchase invoices
         invoices = await client.purchase_invoices.list(division=123)
 
-        # Filter direct invoices only
         invoices = await client.purchase_invoices.list(
             division=123,
             odata_filter="Warehouse ne null"
         )
 
-        # Create direct purchase invoice
         invoice = await client.purchase_invoices.create(
             division=123,
             data={

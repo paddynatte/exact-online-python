@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 import httpx
 
-from exact_online.auth import OAuthManager
+from exact_online.auth import OAuth
 from exact_online.exceptions import APIError, RateLimitError
 from exact_online.rate_limiter import RateLimiter
 from exact_online.retry import RetryableError, RetryConfig, with_retry
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from exact_online.batch import BatchRequest, BatchResult
 
 
-class ExactOnlineClient:
+class Client:
     """Main client for interacting with the Exact Online API.
 
     Handles:
@@ -50,12 +50,12 @@ class ExactOnlineClient:
     - Response parsing and error handling
 
     Usage:
-        async with ExactOnlineClient(oauth=oauth_manager) as client:
+        async with Client(oauth=oauth) as client:
             orders = await client.purchase_orders.list(division=123)
 
     With custom configuration:
-        async with ExactOnlineClient(
-            oauth=oauth_manager,
+        async with Client(
+            oauth=oauth,
             timeout=60.0,
             max_connections=50,
             retry=RetryConfig(max_retries=5),
@@ -65,7 +65,7 @@ class ExactOnlineClient:
 
     def __init__(
         self,
-        oauth: OAuthManager,
+        oauth: OAuth,
         http_client: httpx.AsyncClient | None = None,
         timeout: float = 30.0,
         max_connections: int = 100,
@@ -76,7 +76,7 @@ class ExactOnlineClient:
         """Initialize the client.
 
         Args:
-            oauth: OAuthManager instance for authentication.
+            oauth: OAuth instance for authentication.
             http_client: Optional httpx client (created if not provided).
             timeout: Request timeout in seconds (default 30.0).
             max_connections: Maximum number of concurrent connections (default 100).
@@ -124,7 +124,7 @@ class ExactOnlineClient:
         """Get or create the HTTP client.
 
         Creates client with configured connection pool limits.
-        Also shares the client with OAuthManager to avoid creating
+        Also shares the client with OAuth to avoid creating
         multiple clients and ensure proper cleanup.
         """
         if self._http_client is None:
@@ -440,7 +440,7 @@ class ExactOnlineClient:
 
         async def do_request() -> dict[str, Any]:
             await self._rate_limiter.check_and_wait(division)
-            access_token = await self.oauth.ensure_valid_token()
+            access_token = await self.oauth.get_token()
             url = self._build_url(endpoint, division, params)
 
             logger.debug("API request: %s %s (division=%d)", method, endpoint, division)
@@ -495,7 +495,7 @@ class ExactOnlineClient:
         """
 
         async def do_request() -> dict[str, Any]:
-            access_token = await self.oauth.ensure_valid_token()
+            access_token = await self.oauth.get_token()
             url = self._build_url(endpoint, None, params)
 
             logger.debug("API request: %s %s", method, endpoint)
@@ -558,7 +558,7 @@ class ExactOnlineClient:
             await self._http_client.aclose()
             self._http_client = None
 
-    async def __aenter__(self) -> ExactOnlineClient:
+    async def __aenter__(self) -> Client:
         """Async context manager entry."""
         return self
 
