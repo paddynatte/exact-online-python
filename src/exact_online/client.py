@@ -558,9 +558,32 @@ class Client:
             await self._http_client.aclose()
             self._http_client = None
 
+    async def start(self) -> Client:
+        """Start the client (alternative to context manager).
+
+        Useful for long-running applications with lifespan management.
+
+        Example:
+            ```python
+            @asynccontextmanager
+            async def lifespan(app):
+                await client.start()
+                yield
+                await client.stop()
+            ```
+        """
+        return self
+
+    async def stop(self) -> None:
+        """Stop the client (alternative to context manager).
+
+        Closes the HTTP client and releases resources.
+        """
+        await self.close()
+
     async def __aenter__(self) -> Client:
         """Async context manager entry."""
-        return self
+        return await self.start()
 
     async def __aexit__(
         self,
@@ -569,4 +592,4 @@ class Client:
         exc_tb: TracebackType | None,
     ) -> None:
         """Async context manager exit."""
-        await self.close()
+        await self.stop()
