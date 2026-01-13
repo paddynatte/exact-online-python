@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
@@ -18,11 +17,15 @@ from exact_online.retry import RetryableError, RetryConfig, with_retry
 logger = logging.getLogger("exact_online.client")
 
 if TYPE_CHECKING:
+    from exact_online.api.goods_receipt_lines import GoodsReceiptLinesAPI
+    from exact_online.api.goods_receipts import GoodsReceiptsAPI
     from exact_online.api.me import MeAPI
     from exact_online.api.purchase_order_lines import PurchaseOrderLinesAPI
     from exact_online.api.purchase_orders import PurchaseOrdersAPI
     from exact_online.api.sales_orders import SalesOrdersAPI
     from exact_online.api.shop_orders import ShopOrdersAPI
+    from exact_online.api.stock_count_lines import StockCountLinesAPI
+    from exact_online.api.stock_counts import StockCountsAPI
     from exact_online.api.warehouse_transfers import WarehouseTransfersAPI
     from exact_online.batch import BatchRequest, BatchResult
 
@@ -94,6 +97,10 @@ class Client:
         self._sales_orders: SalesOrdersAPI | None = None
         self._shop_orders: ShopOrdersAPI | None = None
         self._warehouse_transfers: WarehouseTransfersAPI | None = None
+        self._goods_receipts: GoodsReceiptsAPI | None = None
+        self._goods_receipt_lines: GoodsReceiptLinesAPI | None = None
+        self._stock_counts: StockCountsAPI | None = None
+        self._stock_count_lines: StockCountLinesAPI | None = None
 
     async def _get_http_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client.
@@ -267,6 +274,42 @@ class Client:
             self._warehouse_transfers = WarehouseTransfersAPI(self)
         return self._warehouse_transfers
 
+    @property
+    def goods_receipts(self) -> GoodsReceiptsAPI:
+        """Access the Goods Receipts API."""
+        if self._goods_receipts is None:
+            from exact_online.api.goods_receipts import GoodsReceiptsAPI
+
+            self._goods_receipts = GoodsReceiptsAPI(self)
+        return self._goods_receipts
+
+    @property
+    def goods_receipt_lines(self) -> GoodsReceiptLinesAPI:
+        """Access the Goods Receipt Lines API."""
+        if self._goods_receipt_lines is None:
+            from exact_online.api.goods_receipt_lines import GoodsReceiptLinesAPI
+
+            self._goods_receipt_lines = GoodsReceiptLinesAPI(self)
+        return self._goods_receipt_lines
+
+    @property
+    def stock_counts(self) -> StockCountsAPI:
+        """Access the Stock Counts API."""
+        if self._stock_counts is None:
+            from exact_online.api.stock_counts import StockCountsAPI
+
+            self._stock_counts = StockCountsAPI(self)
+        return self._stock_counts
+
+    @property
+    def stock_count_lines(self) -> StockCountLinesAPI:
+        """Access the Stock Count Lines API."""
+        if self._stock_count_lines is None:
+            from exact_online.api.stock_count_lines import StockCountLinesAPI
+
+            self._stock_count_lines = StockCountLinesAPI(self)
+        return self._stock_count_lines
+
     async def request(
         self,
         method: str,
@@ -407,60 +450,6 @@ class Client:
         from exact_online.batch import execute_batch
 
         return await execute_batch(self, requests)
-
-    async def get_sync_timestamp(
-        self,
-        division: int,
-        endpoint: str,
-        modified: datetime,
-    ) -> int:
-        """Get a sync timestamp starting from a specific Modified date.
-
-        This is Exact Online's recommended way to initialize sync operations.
-        Use the returned timestamp with sync() to start syncing from that date.
-
-        Args:
-            division: The division ID.
-            endpoint: The sync endpoint name. Supported values:
-                - "PurchaseOrders" for purchase_orders.sync()
-                - "SalesOrderHeaders" for sales_orders.sync()
-                - "ShopOrders" for shop_orders.sync()
-            modified: Start syncing from records modified on/after this date.
-
-        Returns:
-            Timestamp to use with sync() calls.
-
-        Example:
-            ```python
-            from datetime import datetime
-
-            # Get timestamp for syncing from Jan 1, 2024
-            ts = await client.get_sync_timestamp(
-                division=123,
-                endpoint="PurchaseOrders",
-                modified=datetime(2024, 1, 1),
-            )
-
-            # Use it for syncing
-            result = await client.purchase_orders.sync(division=123, timestamp=ts)
-            ```
-        """
-        modified_str = modified.strftime("%Y-%m-%dT%H:%M:%S")
-
-        response = await self.request(
-            method="GET",
-            endpoint="/read/sync/Sync/SyncTimestamp",
-            division=division,
-            params={
-                "modified": f"datetime'{modified_str}'",
-                "endPoint": f"'{endpoint}'",
-            },
-        )
-
-        data = response.get("d", {})
-        if isinstance(data, list) and len(data) > 0:
-            return data[0].get("TimeStampAsBigInt", 0)
-        return data.get("TimeStampAsBigInt", 0)
 
     async def close(self) -> None:
         """Close the HTTP client if we own it."""

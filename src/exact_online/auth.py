@@ -18,7 +18,6 @@ logger = logging.getLogger("exact_online.auth")
 
 _REFRESH_BUFFER_SECONDS = 30
 
-# Exact Online NL endpoints (hardcoded - only NL region supported)
 _BASE_URL = "https://start.exactonline.nl"
 _API_URL = f"{_BASE_URL}/api/v1"
 _TOKEN_URL = f"{_BASE_URL}/api/oauth2/token"

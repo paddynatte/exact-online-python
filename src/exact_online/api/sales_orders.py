@@ -9,7 +9,7 @@ from exact_online.models.sales_order import SalesOrder
 class SalesOrdersAPI(BaseAPI[SalesOrder]):
     """API resource for Sales Orders.
 
-    Supports full CRUD operations and sync (bulk, up to 1000 records).
+    Supports full CRUD operations: list, get, create, update, delete.
 
     Status values:
         12 - Open
@@ -24,13 +24,10 @@ class SalesOrdersAPI(BaseAPI[SalesOrder]):
 
         order = await client.sales_orders.create(
             division=123,
-            data={"OrderedBy": "guid", "SalesOrderLines": [...]}
+            data={"ordered_by": "guid", "sales_order_lines": [...]}
         )
-
-        result = await client.sales_orders.sync(division=123, timestamp=0)
     """
 
     ENDPOINT: ClassVar[str] = "/salesorder/SalesOrders"
-    SYNC_ENDPOINT: ClassVar[str | None] = "/sync/SalesOrder/SalesOrderHeaders"
     MODEL: ClassVar[type[SalesOrder]] = SalesOrder
     ID_FIELD: ClassVar[str] = "OrderID"

@@ -1,364 +1,65 @@
-# Exact Online Python SDK
+# Exact Online SDK Reference
 
-A minimal, async Python SDK for syncing with the Exact Online API.
+Internal SDK for the Exact Online API. This document serves as a complete reference for integrating with Exact Online in our Litestar + Ariadne GraphQL backend.
 
-Built for our internal use at [your company]. We focused on what we needed—sync operations for purchase orders, sales orders, shop orders, and warehouse transfers. Contributions welcome!
+---
 
-## Features
+## Quick Reference
 
-- **Async-first** - Built on `httpx` for high-performance async operations
-- **Automatic token refresh** - Handles Exact Online's rotating refresh tokens
-- **Sync API support** - Efficient bulk sync using Exact Online's native Timestamp approach
-- **Batching** - Combine multiple requests into a single HTTP call
-- **Rate limiting** - Respects Exact Online's rate limits per division
-- **Automatic retries** - Exponential backoff for transient failures
-- **Pydantic models** - Type-safe responses with full IDE autocomplete
-- **Snake_case conversion** - Write in snake_case, SDK converts to PascalCase for the API
-
-## Installation
-
-```bash
-pip install exact-online
-# or
-uv add exact-online
-```
-
-## Quick Start
+### Available Client Properties
 
 ```python
-from exact_online import Client, OAuth, TokenData
-
-# 1. Implement token storage (see below)
-storage = MyTokenStorage()
-
-# 2. Create OAuth handler
-oauth = OAuth(
-    client_id="your-client-id",
-    client_secret="your-client-secret",
-    redirect_uri="https://yourapp.com/callback",
-    token_storage=storage,
-)
-
-# 3. Use the client
-async with Client(oauth) as client:
-    me = await client.me.current()
-    print(f"Logged in as {me.full_name}")
-    
-    # Sync purchase orders
-    result = await client.purchase_orders.sync(
-        division=me.current_division,
-        timestamp=0,  # Start from beginning
-    )
-    
-    for order in result.items:
-        print(f"Order {order.order_number}: {order.description}")
+client.me                    # Current user info
+client.purchase_orders       # /purchaseorder/PurchaseOrders
+client.purchase_order_lines  # /purchaseorder/PurchaseOrderLines
+client.sales_orders          # /salesorder/SalesOrders
+client.shop_orders           # /manufacturing/ShopOrders
+client.warehouse_transfers   # /inventory/WarehouseTransfers
+client.goods_receipts        # /purchaseorder/GoodsReceipts
+client.goods_receipt_lines   # /purchaseorder/GoodsReceiptLines
+client.stock_counts          # /inventory/StockCounts
+client.stock_count_lines     # /inventory/StockCountLines
 ```
 
-## Authorization Flow
-
-### Step 1: Redirect to Exact Online
-
-```
-https://start.exactonline.nl/api/oauth2/auth?client_id=YOUR_CLIENT_ID&redirect_uri=YOUR_REDIRECT_URI&response_type=code
-```
-
-### Step 2: Handle the callback
-
-After the user signs in, Exact Online redirects to your `redirect_uri` with a code:
-
-```
-https://yourapp.com/callback?code=XTzM!IAAAACbPTzQJXwFhM...
-```
-
-### Step 3: Exchange the code for tokens
+### All APIs Support These Methods
 
 ```python
-await oauth.exchange(code)  # Tokens saved automatically via your storage
+# List with pagination (returns ListResult with .items and .next_url)
+result = await client.<api>.list(division, odata_filter=None, select=None, top=None)
+
+# Auto-paginate through all results (async generator)
+async for item in client.<api>.list_all(division, odata_filter=None, select=None):
+    ...
+
+# Get single record by ID
+item = await client.<api>.get(division, id="guid-string")
+
+# Create new record (pass snake_case data, auto-converts to PascalCase)
+item = await client.<api>.create(division, data={...})
+
+# Update existing record
+item = await client.<api>.update(division, id="guid-string", data={...})
+
+# Delete record
+await client.<api>.delete(division, id="guid-string")
 ```
 
-> **Note**: The authorization code expires after 3 minutes.
+---
 
-## Token Storage
+## Setup
 
-You **must** implement `TokenStorage` to persist tokens. Exact Online rotates the refresh token on every refresh—if you don't save the new tokens, you lose access permanently.
-
-```python
-from exact_online import TokenData
-
-class MyTokenStorage:
-    """Your token storage implementation."""
-    
-    async def get_tokens(self) -> TokenData | None:
-        """Load tokens from your database."""
-        ...
-    
-    async def save_tokens(self, tokens: TokenData) -> None:
-        """Save tokens to your database (called after every refresh!)."""
-        ...
-```
-
-### SQLAlchemy Example
+### 1. Token Storage Implementation
 
 ```python
+# app/exact/storage.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from exact_online import TokenData
 
-class SQLAlchemyTokenStorage:
-    def __init__(self, session: AsyncSession, user_id: int):
-        self.session = session
-        self.user_id = user_id
 
-    async def get_tokens(self) -> TokenData | None:
-        result = await self.session.execute(
-            select(ExactToken).where(ExactToken.user_id == self.user_id)
-        )
-        row = result.scalar_one_or_none()
-        if row:
-            return TokenData(
-                access_token=row.access_token,
-                refresh_token=row.refresh_token,
-                expires_at=row.expires_at,  # Must be timezone-aware UTC!
-            )
-        return None
-
-    async def save_tokens(self, tokens: TokenData) -> None:
-        await self.session.merge(ExactToken(
-            user_id=self.user_id,
-            access_token=tokens.access_token,
-            refresh_token=tokens.refresh_token,
-            expires_at=tokens.expires_at,
-        ))
-        await self.session.commit()
-```
-
-> **Important**: Store `expires_at` as a timezone-aware UTC datetime. Naive or local times will break the refresh logic.
-
-## Sync Operations
-
-The SDK supports Exact Online's native Sync API for efficient bulk synchronization.
-
-### Basic Sync
-
-```python
-# Get initial timestamp from a specific date
-from datetime import datetime
-
-timestamp = await client.get_sync_timestamp(
-    division=division,
-    endpoint="PurchaseOrders",
-    modified=datetime(2024, 1, 1),
-)
-
-# Sync from that timestamp
-result = await client.purchase_orders.sync(division, timestamp=timestamp)
-
-print(f"Got {len(result.items)} orders")
-print(f"Next timestamp: {result.timestamp}")
-print(f"Has more: {result.has_more}")
-
-# Continue syncing while there's more data
-while result.has_more:
-    result = await client.purchase_orders.sync(division, timestamp=result.timestamp)
-    # Process result.items...
-```
-
-### Supported Sync Endpoints
-
-| API | Sync Endpoint Name |
-|-----|-------------------|
-| `client.purchase_orders` | `"PurchaseOrders"` |
-| `client.sales_orders` | `"SalesOrderHeaders"` |
-| `client.shop_orders` | `"ShopOrders"` |
-
-### Warehouse Transfers (No Sync Endpoint)
-
-Warehouse transfers don't have a sync endpoint. Use `sync_by_modified()` instead:
-
-```python
-from datetime import datetime
-
-result = await client.warehouse_transfers.sync_by_modified(
-    division=division,
-    modified_since=datetime(2024, 1, 1),
-)
-
-# Use result.last_modified for the next sync
-next_sync_from = result.last_modified
-```
-
-## Batching
-
-Combine multiple requests into a single HTTP call for better efficiency:
-
-```python
-from exact_online import BatchRequest
-
-result = await client.batch([
-    BatchRequest("GET", "/sync/PurchaseOrder/PurchaseOrders", division),
-    BatchRequest("GET", "/sync/SalesOrder/SalesOrderHeaders", division),
-    BatchRequest("GET", "/sync/Manufacturing/ShopOrders", division),
-])
-
-for response in result:
-    if response.is_success:
-        items = response.data.get("d", {}).get("results", [])
-        print(f"Got {len(items)} items")
-    else:
-        print(f"Error: {response.error}")
-
-print(f"Success: {result.success_count}, Failed: {result.error_count}")
-```
-
-## CRUD Operations
-
-### Create
-
-```python
-# Pass snake_case - SDK converts to PascalCase automatically
-order = await client.purchase_orders.create(division, {
-    "supplier": "supplier-guid",
-    "description": "New order",
-    "warehouse": "warehouse-guid",
-})
-print(f"Created: {order.id}")
-```
-
-### Read
-
-```python
-# Get single record
-order = await client.purchase_orders.get(division, order_id)
-
-# List with filters
-result = await client.purchase_orders.list(
-    division,
-    odata_filter="OrderStatus eq 'Open'",
-    top=60,
-)
-
-# Iterate all (handles pagination)
-async for order in client.purchase_orders.list_all(division):
-    print(order.order_number)
-```
-
-### Update
-
-```python
-order = await client.purchase_orders.update(division, order_id, {
-    "description": "Updated description",
-})
-```
-
-### Delete
-
-```python
-await client.purchase_orders.delete(division, order_id)
-```
-
-## Litestar + Ariadne GraphQL Integration
-
-Here's a complete example for a Litestar backend with Ariadne GraphQL:
-
-### Project Structure
-
-```
-your_app/
-├── app.py              # Litestar app with lifespan
-├── graphql/
-│   ├── schema.py       # GraphQL schema
-│   └── resolvers.py    # Resolvers
-└── exact/
-    ├── client.py       # Exact Online client setup
-    └── storage.py      # Token storage implementation
-```
-
-### app.py
-
-```python
-from contextlib import asynccontextmanager
-from litestar import Litestar
-from litestar.contrib.sqlalchemy.plugins import SQLAlchemyAsyncConfig
-from ariadne.asgi import GraphQL
-
-from your_app.exact.client import exact_client, init_exact_client, close_exact_client
-from your_app.graphql.schema import schema
-
-
-@asynccontextmanager
-async def lifespan(app: Litestar):
-    """Manage application lifecycle."""
-    await init_exact_client()
-    yield
-    await close_exact_client()
-
-
-graphql_app = GraphQL(schema)
-
-app = Litestar(
-    route_handlers=[],
-    lifespan=[lifespan],
-    middleware=[],
-)
-
-# Mount GraphQL
-app.asgi_router.routes.append(("/graphql", graphql_app))
-```
-
-### exact/client.py
-
-```python
-from exact_online import Client, OAuth
-
-from your_app.exact.storage import get_token_storage
-
-# Global client instance
-exact_client: Client | None = None
-
-
-async def init_exact_client():
-    """Initialize Exact Online client."""
-    global exact_client
+class ExactTokenStorage:
+    """Implement this to persist OAuth tokens in your database."""
     
-    storage = await get_token_storage()
-    oauth = OAuth(
-        client_id="your-client-id",
-        client_secret="your-client-secret",
-        redirect_uri="https://yourapp.com/callback",
-        token_storage=storage,
-    )
-    
-    exact_client = Client(oauth)
-    await exact_client.start()
-
-
-async def close_exact_client():
-    """Close Exact Online client."""
-    global exact_client
-    if exact_client:
-        await exact_client.stop()
-        exact_client = None
-
-
-def get_exact_client() -> Client:
-    """Get the Exact Online client."""
-    if exact_client is None:
-        raise RuntimeError("Exact Online client not initialized")
-    return exact_client
-```
-
-### exact/storage.py
-
-```python
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-
-from exact_online import TokenData
-from your_app.db import get_session
-from your_app.models import ExactToken
-
-
-class TokenStorage:
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -369,12 +70,11 @@ class TokenStorage:
             return TokenData(
                 access_token=row.access_token,
                 refresh_token=row.refresh_token,
-                expires_at=row.expires_at,
+                expires_at=row.expires_at,  # MUST be timezone-aware UTC!
             )
         return None
 
     async def save_tokens(self, tokens: TokenData) -> None:
-        # Upsert token record
         existing = await self.session.execute(select(ExactToken).limit(1))
         row = existing.scalar_one_or_none()
         
@@ -390,178 +90,581 @@ class TokenStorage:
             ))
         
         await self.session.commit()
-
-
-async def get_token_storage() -> TokenStorage:
-    session = await get_session()
-    return TokenStorage(session)
 ```
 
-### graphql/schema.py
+### 2. Client Setup
 
 ```python
-from ariadne import make_executable_schema, QueryType, MutationType
-from ariadne.contrib.federation.utils import convert_case
+# app/exact/client.py
+from exact_online import Client, OAuth
+from app.exact.storage import ExactTokenStorage
 
-type_defs = """
-    type Query {
-        me: Me!
-        purchaseOrders(timestamp: Int): SyncResult!
-    }
+exact_client: Client | None = None
+
+
+async def init_exact_client(session):
+    """Call in app lifespan startup."""
+    global exact_client
     
-    type Mutation {
-        createPurchaseOrder(input: PurchaseOrderInput!): PurchaseOrder!
-    }
-    
-    type Me {
-        fullName: String!
-        currentDivision: Int!
-    }
-    
-    type PurchaseOrder {
-        id: ID!
-        orderNumber: Int
-        description: String
-        supplierName: String
-    }
-    
-    type SyncResult {
-        items: [PurchaseOrder!]!
-        timestamp: Int!
-        hasMore: Boolean!
-    }
-    
-    input PurchaseOrderInput {
-        supplier: ID!
-        description: String
-        warehouse: ID
-    }
-"""
-
-query = QueryType()
-mutation = MutationType()
-
-# Enable snake_case to camelCase conversion
-query.set_alias("me", convert_case)
-mutation.set_alias("createPurchaseOrder", convert_case)
-
-schema = make_executable_schema(type_defs, query, mutation)
-```
-
-### graphql/resolvers.py
-
-```python
-from your_app.exact.client import get_exact_client
-from your_app.graphql.schema import query, mutation
-
-
-@query.field("me")
-async def resolve_me(_, info):
-    """Get current user info."""
-    client = get_exact_client()
-    me = await client.me.current()
-    return me  # Pydantic model - Ariadne handles serialization!
-
-
-@query.field("purchaseOrders")
-async def resolve_purchase_orders(_, info, timestamp: int = 0):
-    """Sync purchase orders."""
-    client = get_exact_client()
-    me = await client.me.current()
-    
-    result = await client.purchase_orders.sync(
-        division=me.current_division,
-        timestamp=timestamp,
+    storage = ExactTokenStorage(session)
+    oauth = OAuth(
+        client_id="your-client-id",
+        client_secret="your-client-secret",
+        redirect_uri="https://yourapp.com/exact/callback",
+        token_storage=storage,
     )
     
+    exact_client = Client(oauth)
+    await exact_client.start()
+
+
+async def close_exact_client():
+    """Call in app lifespan shutdown."""
+    global exact_client
+    if exact_client:
+        await exact_client.stop()
+        exact_client = None
+
+
+def get_exact_client() -> Client:
+    """Get client for adding to GraphQL context."""
+    if exact_client is None:
+        raise RuntimeError("Exact client not initialized")
+    return exact_client
+```
+
+### 3. Lifespan Integration
+
+```python
+# app/main.py
+from contextlib import asynccontextmanager
+from litestar import Litestar
+from app.exact.client import init_exact_client, close_exact_client
+
+
+@asynccontextmanager
+async def lifespan(app: Litestar):
+    session = ...  # your database session
+    await init_exact_client(session)
+    yield
+    await close_exact_client()
+```
+
+### 4. GraphQL Context Setup
+
+```python
+# In your Ariadne/GraphQL setup
+from app.exact.client import get_exact_client
+
+def get_context_value(request):
+    """Build GraphQL context with Exact client."""
     return {
-        "items": result.items,  # Pydantic models
-        "timestamp": result.timestamp,
-        "has_more": result.has_more,
+        "request": request,
+        "exact": get_exact_client(),  # Exact Online client in context
     }
-
-
-@mutation.field("createPurchaseOrder")
-async def resolve_create_purchase_order(_, info, input: dict):
-    """Create a new purchase order."""
-    client = get_exact_client()
-    me = await client.me.current()
-    
-    # Input comes as snake_case from Ariadne's convert_case
-    # SDK converts to PascalCase automatically
-    order = await client.purchase_orders.create(
-        division=me.current_division,
-        data=input,
-    )
-    
-    return order  # Pydantic model
 ```
 
-## Background Sync Job
+**Accessing in resolvers:**
+```python
+# info.context["exact"] gives you the Client instance
+client = info.context["exact"]
+```
 
-For periodic syncing, run a background task:
+### 5. OAuth Callback Endpoint
 
 ```python
-import asyncio
-from datetime import datetime
-
-from your_app.exact.client import get_exact_client
-from your_app.db import save_to_database
+# app/routes/exact.py
+from litestar import get
+from app.exact.client import get_exact_client
 
 
-async def sync_job():
-    """Run every 5 minutes via scheduler."""
+@get("/exact/callback")
+async def exact_callback(code: str) -> dict:
+    """Exact Online redirects here after user authorizes."""
     client = get_exact_client()
-    me = await client.me.current()
-    division = me.current_division
-    
-    # Load last timestamps from your database
-    timestamps = await load_timestamps()
-    
-    # Sync purchase orders
-    result = await client.purchase_orders.sync(
-        division, 
-        timestamp=timestamps.get("purchase_orders", 0),
-    )
-    await save_to_database("purchase_orders", result.items)
-    await save_timestamp("purchase_orders", result.timestamp)
-    
-    # Sync sales orders
-    result = await client.sales_orders.sync(
-        division,
-        timestamp=timestamps.get("sales_orders", 0),
-    )
-    await save_to_database("sales_orders", result.items)
-    await save_timestamp("sales_orders", result.timestamp)
-    
-    # Sync shop orders
-    result = await client.shop_orders.sync(
-        division,
-        timestamp=timestamps.get("shop_orders", 0),
-    )
-    await save_to_database("shop_orders", result.items)
-    await save_timestamp("shop_orders", result.timestamp)
-    
-    # Warehouse transfers (no sync endpoint)
-    result = await client.warehouse_transfers.sync_by_modified(
-        division,
-        modified_since=timestamps.get("warehouse_transfers_modified"),
-    )
-    await save_to_database("warehouse_transfers", result.items)
-    if result.last_modified:
-        await save_timestamp("warehouse_transfers_modified", result.last_modified)
+    await client.oauth.exchange(code)
+    return {"ok": True}
 ```
 
-## Available APIs
+**OAuth Authorization URL:**
+```
+https://start.exactonline.nl/api/oauth2/auth?client_id=YOUR_CLIENT_ID&redirect_uri=YOUR_REDIRECT_URI&response_type=code
+```
 
-| Property | Model | Sync Support |
-|----------|-------|--------------|
-| `client.me` | `Me` | - |
-| `client.purchase_orders` | `PurchaseOrder` | ✅ |
-| `client.purchase_order_lines` | `PurchaseOrderLine` | ❌ |
-| `client.sales_orders` | `SalesOrder` | ✅ |
-| `client.shop_orders` | `ShopOrder` | ✅ |
-| `client.warehouse_transfers` | `WarehouseTransfer` | ❌ (use `sync_by_modified`) |
+---
+
+## Data Conversion Rules
+
+### Writing Data (GraphQL → Exact Online)
+- Pass data in **snake_case** (e.g., `purchase_order_lines`, `warehouse_from`)
+- SDK automatically converts to **PascalCase** for Exact Online API
+- Nested objects are also converted recursively
+
+### Reading Data (Exact Online → GraphQL)
+- SDK returns **Pydantic models** with snake_case attributes
+- Ariadne serializes these directly
+- Use `convert_case` in Ariadne schema for snake_case → camelCase to frontend
+
+### Example
+```python
+# Writing - pass snake_case
+await client.purchase_orders.create(division, data={
+    "supplier": "guid",
+    "purchase_order_lines": [
+        {"item": "guid", "quantity": 10}
+    ]
+})
+# SDK sends: {"Supplier": "guid", "PurchaseOrderLines": [{"Item": "guid", "Quantity": 10}]}
+
+# Reading - receive Pydantic model with snake_case
+order = await client.purchase_orders.get(division, id="guid")
+print(order.supplier)  # UUID
+print(order.purchase_order_lines)  # list[PurchaseOrderLine]
+```
+
+---
+
+## Entity Reference
+
+### Me (Current User)
+
+```python
+me = await client.me.current()
+```
+
+**Fields:**
+- `user_id: UUID` - User ID
+- `user_name: str` - User name
+- `full_name: str` - Full name
+- `email: str` - Email address
+- `current_division: int` - Active division ID (use this for all API calls)
+- `division_customer_name: str` - Company name
+
+---
+
+### Purchase Orders
+
+**Endpoint:** `/purchaseorder/PurchaseOrders`  
+**ID Field:** `PurchaseOrderID`
+
+```python
+# List
+orders = await client.purchase_orders.list(division)
+
+# Get
+order = await client.purchase_orders.get(division, id="guid")
+
+# Create
+order = await client.purchase_orders.create(division, data={
+    "supplier": "supplier-guid",  # Required
+    "description": "Order description",
+    "order_date": "2024-01-15",
+    "receipt_date": "2024-01-20",
+    "warehouse": "warehouse-guid",
+    "purchase_order_lines": [
+        {
+            "item": "item-guid",
+            "quantity": 10,
+            "unit_price": 25.50,
+        }
+    ]
+})
+
+# Update
+order = await client.purchase_orders.update(division, id="guid", data={
+    "description": "Updated description"
+})
+
+# Delete
+await client.purchase_orders.delete(division, id="guid")
+```
+
+**Key Fields:**
+- `purchase_order_id: UUID`
+- `order_number: int`
+- `supplier: UUID`
+- `supplier_name: str`
+- `description: str`
+- `order_date: datetime`
+- `receipt_date: datetime`
+- `receipt_status: int` (10=Open, 20=Partial, 50=Complete)
+- `approval_status: int`
+- `amount_dc: float` (amount in default currency)
+- `warehouse: UUID`
+- `purchase_order_lines: list[PurchaseOrderLine]`
+
+---
+
+### Purchase Order Lines
+
+**Endpoint:** `/purchaseorder/PurchaseOrderLines`  
+**ID Field:** `ID`
+
+```python
+# List lines for a specific order
+lines = await client.purchase_order_lines.list(
+    division,
+    odata_filter=f"PurchaseOrderID eq guid'{order_id}'"
+)
+
+# Update a specific line
+line = await client.purchase_order_lines.update(division, id="line-guid", data={
+    "quantity": 20,
+    "unit_price": 30.00
+})
+
+# Create additional line
+line = await client.purchase_order_lines.create(division, data={
+    "purchase_order_id": "order-guid",
+    "item": "item-guid",
+    "quantity": 5,
+    "unit_price": 15.00
+})
+
+# Delete line
+await client.purchase_order_lines.delete(division, id="line-guid")
+```
+
+**Key Fields:**
+- `id: UUID`
+- `purchase_order_id: UUID`
+- `line_number: int`
+- `item: UUID`
+- `item_code: str`
+- `item_description: str`
+- `quantity: float`
+- `unit_price: float`
+- `amount_dc: float`
+- `receipt_date: datetime`
+- `quantity_received: float`
+
+---
+
+### Sales Orders
+
+**Endpoint:** `/salesorder/SalesOrders`  
+**ID Field:** `OrderID`
+
+```python
+# Create
+order = await client.sales_orders.create(division, data={
+    "ordered_by": "customer-guid",  # Required
+    "description": "Sales order",
+    "sales_order_lines": [
+        {
+            "item": "item-guid",
+            "quantity": 5,
+            "unit_price": 100.00
+        }
+    ]
+})
+```
+
+**Status Values:**
+- 12 = Open
+- 20 = Partial
+- 21 = Complete
+- 45 = Cancelled
+
+**Key Fields:**
+- `order_id: UUID`
+- `order_number: int`
+- `ordered_by: UUID` (customer)
+- `ordered_by_name: str`
+- `order_date: datetime`
+- `delivery_date: datetime`
+- `status: int`
+- `amount_dc: float`
+- `sales_order_lines: list[SalesOrderLine]`
+
+---
+
+### Shop Orders
+
+**Endpoint:** `/manufacturing/ShopOrders`  
+**ID Field:** `ID`
+
+```python
+# Create
+order = await client.shop_orders.create(division, data={
+    "item": "item-guid",  # Required - item to manufacture
+    "planned_quantity": 100,
+    "planned_start_date": "2024-01-15",
+})
+```
+
+**Status Values:**
+- 10 = Open
+- 20 = In process
+- 30 = Finished
+- 40 = Completed
+
+**Key Fields:**
+- `id: UUID`
+- `shop_order_number: int`
+- `item: UUID`
+- `item_code: str`
+- `item_description: str`
+- `planned_quantity: float`
+- `produced_quantity: float`
+- `status: int`
+- `planned_start_date: datetime`
+- `planned_end_date: datetime`
+
+---
+
+### Warehouse Transfers
+
+**Endpoint:** `/inventory/WarehouseTransfers`  
+**ID Field:** `TransferID`
+
+```python
+# Create warehouse transfer
+transfer = await client.warehouse_transfers.create(division, data={
+    "warehouse_from": "from-warehouse-guid",
+    "warehouse_to": "to-warehouse-guid",
+    "description": "Transfer description",
+    "warehouse_transfer_lines": [
+        {
+            "item": "item-guid",
+            "quantity": 50
+        }
+    ]
+})
+
+# Location transfer (same warehouse, different locations)
+transfer = await client.warehouse_transfers.create(division, data={
+    "warehouse_from": "warehouse-guid",
+    "warehouse_to": "warehouse-guid",  # Same warehouse
+    "storage_location_from": "location-a-guid",
+    "storage_location_to": "location-b-guid",
+    "warehouse_transfer_lines": [...]
+})
+```
+
+**Key Fields:**
+- `transfer_id: UUID`
+- `transfer_number: int`
+- `warehouse_from: UUID`
+- `warehouse_to: UUID`
+- `storage_location_from: UUID`
+- `storage_location_to: UUID`
+- `transfer_date: datetime`
+- `description: str`
+- `warehouse_transfer_lines: list[WarehouseTransferLine]`
+
+---
+
+### Goods Receipts
+
+**Endpoint:** `/purchaseorder/GoodsReceipts`  
+**ID Field:** `ID`
+
+Records receipt of goods from purchase orders.
+
+```python
+# Create goods receipt (required: receipt_date + goods_receipt_lines)
+receipt = await client.goods_receipts.create(division, data={
+    "receipt_date": "2024-01-15",  # Required
+    "supplier": "supplier-guid",
+    "warehouse": "warehouse-guid",
+    "description": "Goods receipt for PO 12345",
+    "goods_receipt_lines": [  # Required
+        {
+            "item": "item-guid",
+            "quantity_received": 10,
+            "purchase_order_id": "po-guid",
+            "purchase_order_line_id": "po-line-guid"
+        }
+    ]
+})
+
+# List receipts for a supplier
+receipts = await client.goods_receipts.list(
+    division,
+    odata_filter=f"Supplier eq guid'{supplier_id}'"
+)
+```
+
+**Key Fields:**
+- `id: UUID`
+- `receipt_number: int`
+- `receipt_date: datetime` (required for create)
+- `supplier: UUID`
+- `supplier_name: str`
+- `warehouse: UUID`
+- `warehouse_code: str`
+- `description: str`
+- `remarks: str`
+- `goods_receipt_lines: list[GoodsReceiptLine]` (required for create)
+- `created: datetime`
+- `modified: datetime`
+
+---
+
+### Goods Receipt Lines
+
+**Endpoint:** `/purchaseorder/GoodsReceiptLines`  
+**ID Field:** `ID`
+
+```python
+# List lines for a specific receipt
+lines = await client.goods_receipt_lines.list(
+    division,
+    odata_filter=f"GoodsReceiptID eq guid'{receipt_id}'"
+)
+```
+
+**Key Fields:**
+- `id: UUID`
+- `goods_receipt_id: UUID`
+- `item: UUID`
+- `item_code: str`
+- `item_description: str`
+- `quantity_ordered: float`
+- `quantity_received: float`
+- `purchase_order_id: UUID`
+- `purchase_order_line_id: UUID`
+- `purchase_order_number: int`
+- `location: UUID`
+- `location_code: str`
+
+---
+
+### Stock Counts
+
+**Endpoint:** `/inventory/StockCounts`  
+**ID Field:** `StockCountID`
+
+Used for inventory counting/adjustments.
+
+```python
+# Create stock count (required: warehouse, stock_count_date, stock_count_lines)
+count = await client.stock_counts.create(division, data={
+    "warehouse": "warehouse-guid",  # Required
+    "stock_count_date": "2024-01-15",  # Required
+    "status": 12,  # 12 = Open (draft), 21 = Processed
+    "description": "Monthly inventory count",
+    "stock_count_lines": [  # Required
+        {
+            "item": "item-guid",
+            "quantity_new": 100,  # The counted quantity
+            "storage_location": "location-guid"
+        }
+    ]
+})
+
+# List draft counts
+counts = await client.stock_counts.list(
+    division,
+    odata_filter="Status eq 12"
+)
+```
+
+**Status Values:**
+- 12 = Open (draft) - can still be edited
+- 21 = Processed - inventory updated, cannot edit
+
+**Key Fields:**
+- `stock_count_id: UUID`
+- `stock_count_number: int`
+- `stock_count_date: datetime` (required)
+- `warehouse: UUID` (required)
+- `warehouse_code: str`
+- `status: int`
+- `description: str`
+- `counted_by: UUID`
+- `stock_count_lines: list[StockCountLine]` (required for create)
+- `created: datetime`
+- `modified: datetime`
+
+---
+
+### Stock Count Lines
+
+**Endpoint:** `/inventory/StockCountLines`  
+**ID Field:** `ID`
+
+```python
+# List lines for a specific count
+lines = await client.stock_count_lines.list(
+    division,
+    odata_filter=f"StockCountID eq guid'{count_id}'"
+)
+
+# Update a counted quantity
+line = await client.stock_count_lines.update(division, id="line-guid", data={
+    "quantity_new": 150
+})
+```
+
+**Key Fields:**
+- `id: UUID`
+- `stock_count_id: UUID`
+- `item: UUID`
+- `item_code: str`
+- `item_description: str`
+- `quantity_in_stock: float` - System quantity before count
+- `quantity_new: float` - Counted quantity
+- `quantity_difference: float` - Calculated difference
+- `storage_location: UUID`
+- `storage_location_code: str`
+- `batch_number: str`
+- `serial_number: str`
+- `cost_price: float`
+
+---
+
+## Filtering with OData
+
+Use `odata_filter` parameter for filtering:
+
+```python
+# Exact match
+odata_filter="Status eq 12"
+
+# GUID comparison
+odata_filter=f"Supplier eq guid'{supplier_id}'"
+
+# String comparison
+odata_filter="SupplierName eq 'Acme Corp'"
+
+# Numeric comparison
+odata_filter="Quantity gt 100"
+
+# Date comparison
+odata_filter="OrderDate ge datetime'2024-01-01'"
+
+# Combine with and/or
+odata_filter="Status eq 12 and Quantity gt 0"
+
+# String contains (substringof)
+odata_filter="substringof('keyword', Description)"
+```
+
+---
+
+## Batching Multiple Requests
+
+Combine multiple GET requests into a single HTTP call:
+
+```python
+from exact_online import BatchRequest
+
+result = await client.batch([
+    BatchRequest("GET", "/purchaseorder/PurchaseOrders", division),
+    BatchRequest("GET", "/salesorder/SalesOrders", division),
+    BatchRequest("GET", "/manufacturing/ShopOrders", division),
+])
+
+for response in result:
+    if response.is_success:
+        print(response.data)  # Response JSON
+    else:
+        print(f"Error {response.status_code}: {response.error}")
+```
+
+---
 
 ## Error Handling
 
@@ -569,17 +672,167 @@ async def sync_job():
 from exact_online import APIError, RateLimitError, AuthenticationError
 
 try:
-    result = await client.purchase_orders.sync(division, timestamp=0)
-except RateLimitError:
-    # Wait and retry - SDK handles this automatically with retries
-    pass
+    orders = await client.purchase_orders.list(division)
 except AuthenticationError:
-    # User needs to re-authenticate
+    # Token expired/invalid - redirect user to OAuth
+    pass
+except RateLimitError:
+    # Rate limit exceeded (SDK retries automatically, this means retries exhausted)
     pass
 except APIError as e:
-    print(f"API error {e.status_code}: {e.message}")
+    # Other API errors
+    print(f"Error {e.status_code}: {e.message}")
 ```
 
-## License
+---
 
-MIT
+## GraphQL Resolver Examples
+
+All resolvers access the Exact client via `info.context["exact"]`.
+
+### Query - List with Filter
+
+```python
+@query.field("purchaseOrders")
+async def resolve_purchase_orders(_, info, status: int | None = None):
+    client = info.context["exact"]
+    me = await client.me.current()
+    
+    odata_filter = f"ReceiptStatus eq {status}" if status else None
+    
+    result = await client.purchase_orders.list(
+        division=me.current_division,
+        odata_filter=odata_filter,
+    )
+    
+    return result.items
+```
+
+### Query - Get Single
+
+```python
+@query.field("purchaseOrder")
+async def resolve_purchase_order(_, info, id: str):
+    client = info.context["exact"]
+    me = await client.me.current()
+    
+    return await client.purchase_orders.get(
+        division=me.current_division,
+        id=id,
+    )
+```
+
+### Mutation - Create
+
+```python
+@mutation.field("createPurchaseOrder")
+async def resolve_create_purchase_order(_, info, input: dict):
+    client = info.context["exact"]
+    me = await client.me.current()
+    
+    return await client.purchase_orders.create(
+        division=me.current_division,
+        data=input,  # Pass snake_case from GraphQL input
+    )
+```
+
+### Mutation - Update
+
+```python
+@mutation.field("updatePurchaseOrderLine")
+async def resolve_update_line(_, info, id: str, input: dict):
+    client = info.context["exact"]
+    me = await client.me.current()
+    
+    return await client.purchase_order_lines.update(
+        division=me.current_division,
+        id=id,
+        data=input,
+    )
+```
+
+### Mutation - Delete
+
+```python
+@mutation.field("deletePurchaseOrder")
+async def resolve_delete(_, info, id: str):
+    client = info.context["exact"]
+    me = await client.me.current()
+    
+    await client.purchase_orders.delete(
+        division=me.current_division,
+        id=id,
+    )
+    
+    return True
+```
+
+### Mutation - Create Goods Receipt
+
+```python
+@mutation.field("createGoodsReceipt")
+async def resolve_create_receipt(_, info, input: dict):
+    client = info.context["exact"]
+    me = await client.me.current()
+    
+    return await client.goods_receipts.create(
+        division=me.current_division,
+        data={
+            "receipt_date": input["receiptDate"],
+            "supplier": input.get("supplierId"),
+            "warehouse": input.get("warehouseId"),
+            "goods_receipt_lines": [
+                {
+                    "item": line["itemId"],
+                    "quantity_received": line["quantity"],
+                    "purchase_order_id": line.get("purchaseOrderId"),
+                    "purchase_order_line_id": line.get("purchaseOrderLineId"),
+                }
+                for line in input["lines"]
+            ]
+        }
+    )
+```
+
+### Mutation - Create Stock Count
+
+```python
+@mutation.field("createStockCount")
+async def resolve_create_stock_count(_, info, input: dict):
+    client = info.context["exact"]
+    me = await client.me.current()
+    
+    return await client.stock_counts.create(
+        division=me.current_division,
+        data={
+            "warehouse": input["warehouseId"],
+            "stock_count_date": input["date"],
+            "status": 12,  # Draft
+            "description": input.get("description"),
+            "stock_count_lines": [
+                {
+                    "item": line["itemId"],
+                    "quantity_new": line["countedQuantity"],
+                    "storage_location": line.get("locationId"),
+                }
+                for line in input["lines"]
+            ]
+        }
+    )
+```
+
+---
+
+## Important Notes
+
+1. **Token Storage is Critical** - Exact Online rotates refresh tokens on every use. If you don't save the new token after each refresh, you permanently lose access and must re-authorize.
+
+2. **expires_at Must Be UTC** - Store as timezone-aware UTC datetime, never naive datetime.
+
+3. **Division is Required** - Every API call needs a division ID. Get it from `client.me.current().current_division`.
+
+4. **Pydantic Models Work with Ariadne** - Return models directly from resolvers. Use `convert_case` in your Ariadne schema for automatic snake_case → camelCase conversion.
+
+5. **Exact Online is Source of Truth** - We read/write directly to Exact's API. Only OAuth tokens are stored locally.
+
+6. **Rate Limits** - SDK handles rate limiting automatically with retries. 60 requests/minute per division.

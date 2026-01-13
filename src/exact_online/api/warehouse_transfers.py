@@ -9,7 +9,7 @@ from exact_online.models.warehouse_transfer import WarehouseTransfer
 class WarehouseTransfersAPI(BaseAPI[WarehouseTransfer]):
     """API resource for Warehouse Transfers.
 
-    Manage warehouse and location transfers (bulk, up to 1000 records).
+    Supports full CRUD operations: list, get, create, update, delete.
 
     When WarehouseFrom equals WarehouseTo, it's a location transfer.
 
@@ -21,14 +21,13 @@ class WarehouseTransfersAPI(BaseAPI[WarehouseTransfer]):
         transfer = await client.warehouse_transfers.create(
             division=123,
             data={
-                "WarehouseFrom": "from-guid",
-                "WarehouseTo": "to-guid",
-                "WarehouseTransferLines": [...]
+                "warehouse_from": "from-guid",
+                "warehouse_to": "to-guid",
+                "warehouse_transfer_lines": [...]
             }
         )
     """
 
     ENDPOINT: ClassVar[str] = "/inventory/WarehouseTransfers"
-    SYNC_ENDPOINT: ClassVar[str | None] = None
     MODEL: ClassVar[type[WarehouseTransfer]] = WarehouseTransfer
     ID_FIELD: ClassVar[str] = "TransferID"

@@ -1,6 +1,6 @@
 """Exact Online Python SDK.
 
-A minimal Python SDK for syncing with the Exact Online API.
+A minimal Python SDK for the Exact Online API.
 """
 
 from exact_online.auth import OAuth, TokenData, TokenStorage
@@ -14,7 +14,7 @@ from exact_online.exceptions import (
     TokenExpiredError,
     TokenRefreshError,
 )
-from exact_online.models.base import ListResult, ModifiedSyncResult, SyncResult
+from exact_online.models.base import ListResult
 from exact_online.retry import RetryConfig
 
 __all__ = [
@@ -26,8 +26,6 @@ __all__ = [
     "BatchResponse",
     "BatchResult",
     "ListResult",
-    "SyncResult",
-    "ModifiedSyncResult",
     "RetryConfig",
     "APIError",
     "AuthenticationError",

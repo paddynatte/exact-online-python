@@ -12,7 +12,6 @@ from exact_online import (
 )
 from exact_online.models.base import (
     ListResult,
-    SyncResult,
     parse_odata_datetime,
 )
 
@@ -66,20 +65,6 @@ class TestListResult:
             items=[], next_url="http://example.com/next"
         )
 
-        assert result.has_more is True
-
-
-class TestSyncResult:
-    """Tests for SyncResult dataclass."""
-
-    def test_attributes(self) -> None:
-        """SyncResult should have correct attributes."""
-        result: SyncResult[int] = SyncResult(
-            items=[1, 2], timestamp=12345, has_more=True
-        )
-
-        assert result.items == [1, 2]
-        assert result.timestamp == 12345
         assert result.has_more is True
 
 
@@ -151,80 +136,6 @@ class TestBaseAPIList:
 
         assert result.has_more is True
         assert result.next_url == next_url
-
-
-class TestBaseAPISync:
-    """Tests for BaseAPI.sync() method."""
-
-    async def test_sync_returns_sync_result(
-        self, client: Client, httpx_mock: HTTPXMock
-    ) -> None:
-        """sync() should return a SyncResult."""
-        httpx_mock.add_response(
-            json={
-                "d": {
-                    "results": [
-                        {
-                            "PurchaseOrderID": "33333333-3333-3333-3333-333333333333",
-                            "Supplier": "00000000-0000-0000-0000-000000000001",
-                            "Timestamp": 12345,
-                        }
-                    ]
-                }
-            },
-        )
-
-        result = await client.purchase_orders.sync(division=123, timestamp=0)
-
-        assert isinstance(result, SyncResult)
-        assert result.timestamp == 12345
-        assert result.has_more is False
-
-    async def test_sync_handles_null_timestamp(
-        self, client: Client, httpx_mock: HTTPXMock
-    ) -> None:
-        """sync() should handle null Timestamp values without crashing."""
-        httpx_mock.add_response(
-            json={
-                "d": {
-                    "results": [
-                        {
-                            "PurchaseOrderID": "44444444-4444-4444-4444-444444444444",
-                            "Supplier": "00000000-0000-0000-0000-000000000001",
-                            "Timestamp": None,
-                        },
-                        {
-                            "PurchaseOrderID": "55555555-5555-5555-5555-555555555555",
-                            "Supplier": "00000000-0000-0000-0000-000000000001",
-                            "Timestamp": 99999,
-                        },
-                    ]
-                }
-            },
-        )
-
-        result = await client.purchase_orders.sync(division=123, timestamp=0)
-
-        assert result.timestamp == 99999
-
-    async def test_sync_has_more_when_1000_results(
-        self, client: Client, httpx_mock: HTTPXMock
-    ) -> None:
-        """sync() should set has_more=True when 1000 results returned."""
-        results = [
-            {
-                "PurchaseOrderID": f"00000000-0000-0000-0000-{i:012d}",
-                "Supplier": "00000000-0000-0000-0000-000000000001",
-                "Timestamp": i,
-            }
-            for i in range(1000)
-        ]
-        httpx_mock.add_response(json={"d": {"results": results}})
-
-        result = await client.purchase_orders.sync(division=123)
-
-        assert result.has_more is True
-        assert result.timestamp == 999
 
 
 class TestRateLimiter:
@@ -333,17 +244,6 @@ class TestReprMethods:
         assert "ListResult" in repr_str
         assert "items=2" in repr_str
         assert "has_more=True" in repr_str
-
-    def test_sync_result_repr(self) -> None:
-        """SyncResult should have readable repr."""
-        result: SyncResult[int] = SyncResult(
-            items=[1, 2, 3], timestamp=999, has_more=True
-        )
-        repr_str = repr(result)
-
-        assert "SyncResult" in repr_str
-        assert "items=3" in repr_str
-        assert "timestamp=999" in repr_str
 
 
 class TestTimeoutConfig:

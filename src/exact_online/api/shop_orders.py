@@ -9,7 +9,7 @@ from exact_online.models.shop_order import ShopOrder
 class ShopOrdersAPI(BaseAPI[ShopOrder]):
     """API resource for Shop Orders.
 
-    Supports full CRUD operations and sync (bulk, up to 1000 records).
+    Supports full CRUD operations: list, get, create, update, delete.
 
     Status values:
         10 - Open
@@ -24,13 +24,10 @@ class ShopOrdersAPI(BaseAPI[ShopOrder]):
 
         order = await client.shop_orders.create(
             division=123,
-            data={"Item": "guid", "PlannedQuantity": 100}
+            data={"item": "guid", "planned_quantity": 100}
         )
-
-        result = await client.shop_orders.sync(division=123, timestamp=0)
     """
 
     ENDPOINT: ClassVar[str] = "/manufacturing/ShopOrders"
-    SYNC_ENDPOINT: ClassVar[str | None] = "/sync/Manufacturing/ShopOrders"
     MODEL: ClassVar[type[ShopOrder]] = ShopOrder
     ID_FIELD: ClassVar[str] = "ID"

@@ -1,15 +1,14 @@
-"""Base API resource class with CRUD and sync operations."""
+"""Base API resource class with CRUD operations."""
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
-from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel
 
-from exact_online.models.base import ListResult, ModifiedSyncResult, SyncResult
+from exact_online.models.base import ListResult
 
 if TYPE_CHECKING:
     from exact_online.client import Client
@@ -37,8 +36,8 @@ def _has_snake_keys(data: dict[str, Any]) -> bool:
 class BaseAPI[TModel: BaseModel]:
     """Base class for API resources.
 
-    Provides common CRUD operations and optional sync support.
-    Subclasses define ENDPOINT, SYNC_ENDPOINT (optional), and MODEL.
+    Provides common CRUD operations: list, get, create, update, delete.
+    Subclasses define ENDPOINT and MODEL.
 
     Data passed to create() and update() can use either:
     - snake_case keys (e.g., "warehouse_from") - auto-converted to PascalCase
@@ -46,7 +45,6 @@ class BaseAPI[TModel: BaseModel]:
     """
 
     ENDPOINT: ClassVar[str]
-    SYNC_ENDPOINT: ClassVar[str | None] = None
     MODEL: ClassVar[type[BaseModel]]
     ID_FIELD: ClassVar[str] = "ID"
 
@@ -283,127 +281,4 @@ class BaseAPI[TModel: BaseModel]:
             method="DELETE",
             endpoint=endpoint,
             division=division,
-        )
-
-    async def sync(
-        self,
-        division: int,
-        *,
-        timestamp: int = 0,
-        odata_filter: str | None = None,
-        select: Sequence[str] | None = None,
-    ) -> SyncResult[TModel]:
-        """Bulk sync using the Sync API endpoint.
-
-        Returns up to 1000 records modified since the given timestamp.
-        Use the returned timestamp for the next sync call.
-
-        Args:
-            division: The division ID.
-            timestamp: Sync from this timestamp (0 = get all).
-            odata_filter: Optional OData filter expression.
-            select: Optional list of fields to return.
-
-        Returns:
-            SyncResult containing items, next timestamp, and has_more flag.
-
-        Raises:
-            NotImplementedError: If this entity doesn't support sync.
-        """
-        if self.SYNC_ENDPOINT is None:
-            raise NotImplementedError(
-                f"{self.__class__.__name__} does not support sync"
-            )
-
-        params: dict[str, Any] = {}
-
-        if timestamp > 0:
-            params["$filter"] = f"Timestamp gt {timestamp}"
-            if odata_filter:
-                params["$filter"] += f" and ({odata_filter})"
-        elif odata_filter:
-            params["$filter"] = odata_filter
-
-        if select:
-            params["$select"] = ",".join(select)
-
-        response = await self._client.request(
-            method="GET",
-            endpoint=self.SYNC_ENDPOINT,
-            division=division,
-            params=params,
-        )
-
-        data = response.get("d", {})
-        results = data if isinstance(data, list) else data.get("results", [])
-
-        items = cast(list[TModel], [self.MODEL.model_validate(item) for item in results])
-
-        next_timestamp = timestamp
-        for item in results:
-            item_ts = item.get("Timestamp") or 0
-            if isinstance(item_ts, str):
-                try:
-                    item_ts = int(item_ts)
-                except ValueError:
-                    item_ts = 0
-            if item_ts > next_timestamp:
-                next_timestamp = item_ts
-
-        has_more = len(results) >= 1000
-
-        return SyncResult(
-            items=items,
-            timestamp=next_timestamp,
-            has_more=has_more,
-        )
-
-    async def sync_by_modified(
-        self,
-        division: int,
-        *,
-        modified_since: datetime | None = None,
-        select: Sequence[str] | None = None,
-        top: int = 1000,
-    ) -> ModifiedSyncResult[TModel]:
-        """Sync records by Modified date (for entities without sync endpoint).
-
-        Use this for entities like WarehouseTransfers that don't have a
-        dedicated /sync/ endpoint. Falls back to filtering by Modified datetime.
-
-        Args:
-            division: The division ID.
-            modified_since: Only return records modified after this datetime.
-            select: Optional list of fields to return.
-            top: Maximum records to return (default 1000).
-
-        Returns:
-            ModifiedSyncResult with items and last_modified timestamp.
-        """
-        odata_filter: str | None = None
-        if modified_since:
-            iso = modified_since.strftime("%Y-%m-%dT%H:%M:%S")
-            odata_filter = f"Modified gt datetime'{iso}'"
-
-        items: list[TModel] = []
-        async for item in self.list_all(
-            division=division,
-            odata_filter=odata_filter,
-            select=select,
-        ):
-            items.append(item)
-            if len(items) >= top:
-                break
-
-        # Find highest Modified timestamp
-        last_modified: datetime | None = None
-        for item in items:
-            if hasattr(item, "modified") and item.modified:
-                if last_modified is None or item.modified > last_modified:
-                    last_modified = item.modified
-
-        return ModifiedSyncResult(
-            items=items,
-            last_modified=last_modified,
-            has_more=len(items) >= top,
         )

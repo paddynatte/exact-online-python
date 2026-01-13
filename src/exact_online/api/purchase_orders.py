@@ -9,7 +9,7 @@ from exact_online.models.purchase_order import PurchaseOrder
 class PurchaseOrdersAPI(BaseAPI[PurchaseOrder]):
     """API resource for Purchase Orders.
 
-    Supports full CRUD operations and sync (bulk, up to 1000 records).
+    Supports full CRUD operations: list, get, create, update, delete.
 
     Usage:
         orders = await client.purchase_orders.list(division=123)
@@ -18,13 +18,10 @@ class PurchaseOrdersAPI(BaseAPI[PurchaseOrder]):
 
         order = await client.purchase_orders.create(
             division=123,
-            data={"Supplier": "guid", "PurchaseOrderLines": [...]}
+            data={"supplier": "guid", "purchase_order_lines": [...]}
         )
-
-        result = await client.purchase_orders.sync(division=123, timestamp=0)
     """
 
     ENDPOINT: ClassVar[str] = "/purchaseorder/PurchaseOrders"
-    SYNC_ENDPOINT: ClassVar[str | None] = "/sync/PurchaseOrder/PurchaseOrders"
     MODEL: ClassVar[type[PurchaseOrder]] = PurchaseOrder
     ID_FIELD: ClassVar[str] = "PurchaseOrderID"
