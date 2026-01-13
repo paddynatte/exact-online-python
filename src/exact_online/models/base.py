@@ -96,3 +96,28 @@ class SyncResult[TModel]:
             f"SyncResult(items={len(self.items)}, "
             f"timestamp={self.timestamp}, has_more={self.has_more})"
         )
+
+
+@dataclass
+class ModifiedSyncResult[TModel]:
+    """Result from sync_by_modified operation.
+
+    Used for entities without a dedicated sync endpoint (e.g., WarehouseTransfers).
+    Uses the Modified datetime field instead of Timestamp.
+
+    Attributes:
+        items: List of records modified since the given datetime.
+        last_modified: Highest Modified value from results (use for next sync).
+        has_more: True if pagination limit was reached.
+    """
+
+    items: list[TModel]
+    last_modified: datetime | None
+    has_more: bool
+
+    def __repr__(self) -> str:
+        """Return a readable representation."""
+        return (
+            f"ModifiedSyncResult(items={len(self.items)}, "
+            f"last_modified={self.last_modified}, has_more={self.has_more})"
+        )

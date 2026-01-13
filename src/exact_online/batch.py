@@ -320,7 +320,7 @@ async def execute_batch(
     if not requests:
         raise ValueError("Batch requests list cannot be empty")
 
-    base_url = client.oauth.region.api_url
+    base_url = client.oauth.api_url
 
     async def do_batch() -> BatchResult:
         access_token = await client.oauth.get_token()

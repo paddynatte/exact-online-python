@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
@@ -17,24 +18,11 @@ from exact_online.retry import RetryableError, RetryConfig, with_retry
 logger = logging.getLogger("exact_online.client")
 
 if TYPE_CHECKING:
-    from exact_online.api.accounts import AccountsAPI
-    from exact_online.api.bill_of_material_materials import BillOfMaterialMaterialsAPI
-    from exact_online.api.item_extra_fields import ItemExtraFieldsAPI
-    from exact_online.api.item_warehouses import ItemWarehousesAPI
-    from exact_online.api.items import ItemsAPI
     from exact_online.api.me import MeAPI
-    from exact_online.api.payables_list import PayablesListAPI
-    from exact_online.api.purchase_invoices import PurchaseInvoicesAPI
-    from exact_online.api.purchase_item_prices import PurchaseItemPricesAPI
     from exact_online.api.purchase_order_lines import PurchaseOrderLinesAPI
     from exact_online.api.purchase_orders import PurchaseOrdersAPI
-    from exact_online.api.receivables_list import ReceivablesListAPI
-    from exact_online.api.reporting_balance import ReportingBalanceAPI
-    from exact_online.api.sales_item_prices import SalesItemPricesAPI
     from exact_online.api.sales_orders import SalesOrdersAPI
     from exact_online.api.shop_orders import ShopOrdersAPI
-    from exact_online.api.stock_count_lines import StockCountLinesAPI
-    from exact_online.api.supplier_items import SupplierItemsAPI
     from exact_online.api.warehouse_transfers import WarehouseTransfersAPI
     from exact_online.batch import BatchRequest, BatchResult
 
@@ -100,24 +88,11 @@ class Client:
         else:
             self._retry_config = retry
 
-        self._accounts: AccountsAPI | None = None
-        self._bill_of_material_materials: BillOfMaterialMaterialsAPI | None = None
-        self._item_extra_fields: ItemExtraFieldsAPI | None = None
-        self._item_warehouses: ItemWarehousesAPI | None = None
-        self._items: ItemsAPI | None = None
         self._me: MeAPI | None = None
-        self._payables_list: PayablesListAPI | None = None
-        self._purchase_invoices: PurchaseInvoicesAPI | None = None
-        self._purchase_item_prices: PurchaseItemPricesAPI | None = None
         self._purchase_orders: PurchaseOrdersAPI | None = None
         self._purchase_order_lines: PurchaseOrderLinesAPI | None = None
-        self._receivables_list: ReceivablesListAPI | None = None
-        self._reporting_balance: ReportingBalanceAPI | None = None
-        self._sales_item_prices: SalesItemPricesAPI | None = None
         self._sales_orders: SalesOrdersAPI | None = None
         self._shop_orders: ShopOrdersAPI | None = None
-        self._stock_count_lines: StockCountLinesAPI | None = None
-        self._supplier_items: SupplierItemsAPI | None = None
         self._warehouse_transfers: WarehouseTransfersAPI | None = None
 
     async def _get_http_client(self) -> httpx.AsyncClient:
@@ -156,9 +131,9 @@ class Client:
             Full URL with encoded query string.
         """
         if division is not None:
-            base_url = f"{self.oauth.region.api_url}/{division}{endpoint}"
+            base_url = f"{self.oauth.api_url}/{division}{endpoint}"
         else:
-            base_url = f"{self.oauth.region.api_url}{endpoint}"
+            base_url = f"{self.oauth.api_url}{endpoint}"
 
         if params:
             query_parts = [f"{k}={quote(str(v), safe='')}" for k, v in params.items()]
@@ -237,53 +212,6 @@ class Client:
             raise APIError(response.status_code, message)
 
     @property
-    def accounts(self) -> AccountsAPI:
-        """Access the Accounts (customers, suppliers) API."""
-        if self._accounts is None:
-            from exact_online.api.accounts import AccountsAPI
-
-            self._accounts = AccountsAPI(self)
-        return self._accounts
-
-    @property
-    def bill_of_material_materials(self) -> BillOfMaterialMaterialsAPI:
-        """Access the Bill of Material Materials API."""
-        if self._bill_of_material_materials is None:
-            from exact_online.api.bill_of_material_materials import (
-                BillOfMaterialMaterialsAPI,
-            )
-
-            self._bill_of_material_materials = BillOfMaterialMaterialsAPI(self)
-        return self._bill_of_material_materials
-
-    @property
-    def item_extra_fields(self) -> ItemExtraFieldsAPI:
-        """Access the Item Extra Fields API (function endpoint)."""
-        if self._item_extra_fields is None:
-            from exact_online.api.item_extra_fields import ItemExtraFieldsAPI
-
-            self._item_extra_fields = ItemExtraFieldsAPI(self)
-        return self._item_extra_fields
-
-    @property
-    def item_warehouses(self) -> ItemWarehousesAPI:
-        """Access the Item Warehouses API."""
-        if self._item_warehouses is None:
-            from exact_online.api.item_warehouses import ItemWarehousesAPI
-
-            self._item_warehouses = ItemWarehousesAPI(self)
-        return self._item_warehouses
-
-    @property
-    def items(self) -> ItemsAPI:
-        """Access the Items (products/services) API."""
-        if self._items is None:
-            from exact_online.api.items import ItemsAPI
-
-            self._items = ItemsAPI(self)
-        return self._items
-
-    @property
     def me(self) -> MeAPI:
         """Access the Me (current user) API."""
         if self._me is None:
@@ -291,33 +219,6 @@ class Client:
 
             self._me = MeAPI(self)
         return self._me
-
-    @property
-    def payables_list(self) -> PayablesListAPI:
-        """Access the Payables List API."""
-        if self._payables_list is None:
-            from exact_online.api.payables_list import PayablesListAPI
-
-            self._payables_list = PayablesListAPI(self)
-        return self._payables_list
-
-    @property
-    def purchase_invoices(self) -> PurchaseInvoicesAPI:
-        """Access the Purchase Invoices API."""
-        if self._purchase_invoices is None:
-            from exact_online.api.purchase_invoices import PurchaseInvoicesAPI
-
-            self._purchase_invoices = PurchaseInvoicesAPI(self)
-        return self._purchase_invoices
-
-    @property
-    def purchase_item_prices(self) -> PurchaseItemPricesAPI:
-        """Access the Purchase Item Prices API (sync-only)."""
-        if self._purchase_item_prices is None:
-            from exact_online.api.purchase_item_prices import PurchaseItemPricesAPI
-
-            self._purchase_item_prices = PurchaseItemPricesAPI(self)
-        return self._purchase_item_prices
 
     @property
     def purchase_orders(self) -> PurchaseOrdersAPI:
@@ -340,33 +241,6 @@ class Client:
         return self._purchase_order_lines
 
     @property
-    def receivables_list(self) -> ReceivablesListAPI:
-        """Access the Receivables List API."""
-        if self._receivables_list is None:
-            from exact_online.api.receivables_list import ReceivablesListAPI
-
-            self._receivables_list = ReceivablesListAPI(self)
-        return self._receivables_list
-
-    @property
-    def reporting_balance(self) -> ReportingBalanceAPI:
-        """Access the Reporting Balance API."""
-        if self._reporting_balance is None:
-            from exact_online.api.reporting_balance import ReportingBalanceAPI
-
-            self._reporting_balance = ReportingBalanceAPI(self)
-        return self._reporting_balance
-
-    @property
-    def sales_item_prices(self) -> SalesItemPricesAPI:
-        """Access the Sales Item Prices API."""
-        if self._sales_item_prices is None:
-            from exact_online.api.sales_item_prices import SalesItemPricesAPI
-
-            self._sales_item_prices = SalesItemPricesAPI(self)
-        return self._sales_item_prices
-
-    @property
     def sales_orders(self) -> SalesOrdersAPI:
         """Access the Sales Orders API."""
         if self._sales_orders is None:
@@ -383,24 +257,6 @@ class Client:
 
             self._shop_orders = ShopOrdersAPI(self)
         return self._shop_orders
-
-    @property
-    def stock_count_lines(self) -> StockCountLinesAPI:
-        """Access the Stock Count Lines API."""
-        if self._stock_count_lines is None:
-            from exact_online.api.stock_count_lines import StockCountLinesAPI
-
-            self._stock_count_lines = StockCountLinesAPI(self)
-        return self._stock_count_lines
-
-    @property
-    def supplier_items(self) -> SupplierItemsAPI:
-        """Access the Supplier Items API."""
-        if self._supplier_items is None:
-            from exact_online.api.supplier_items import SupplierItemsAPI
-
-            self._supplier_items = SupplierItemsAPI(self)
-        return self._supplier_items
 
     @property
     def warehouse_transfers(self) -> WarehouseTransfersAPI:
@@ -551,6 +407,60 @@ class Client:
         from exact_online.batch import execute_batch
 
         return await execute_batch(self, requests)
+
+    async def get_sync_timestamp(
+        self,
+        division: int,
+        endpoint: str,
+        modified: datetime,
+    ) -> int:
+        """Get a sync timestamp starting from a specific Modified date.
+
+        This is Exact Online's recommended way to initialize sync operations.
+        Use the returned timestamp with sync() to start syncing from that date.
+
+        Args:
+            division: The division ID.
+            endpoint: The sync endpoint name. Supported values:
+                - "PurchaseOrders" for purchase_orders.sync()
+                - "SalesOrderHeaders" for sales_orders.sync()
+                - "ShopOrders" for shop_orders.sync()
+            modified: Start syncing from records modified on/after this date.
+
+        Returns:
+            Timestamp to use with sync() calls.
+
+        Example:
+            ```python
+            from datetime import datetime
+
+            # Get timestamp for syncing from Jan 1, 2024
+            ts = await client.get_sync_timestamp(
+                division=123,
+                endpoint="PurchaseOrders",
+                modified=datetime(2024, 1, 1),
+            )
+
+            # Use it for syncing
+            result = await client.purchase_orders.sync(division=123, timestamp=ts)
+            ```
+        """
+        modified_str = modified.strftime("%Y-%m-%dT%H:%M:%S")
+
+        response = await self.request(
+            method="GET",
+            endpoint="/read/sync/Sync/SyncTimestamp",
+            division=division,
+            params={
+                "modified": f"datetime'{modified_str}'",
+                "endPoint": f"'{endpoint}'",
+            },
+        )
+
+        data = response.get("d", {})
+        if isinstance(data, list) and len(data) > 0:
+            return data[0].get("TimeStampAsBigInt", 0)
+        return data.get("TimeStampAsBigInt", 0)
 
     async def close(self) -> None:
         """Close the HTTP client if we own it."""

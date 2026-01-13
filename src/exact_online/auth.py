@@ -9,7 +9,6 @@ from typing import Any, Protocol
 import httpx
 from pydantic import BaseModel
 
-from exact_online.constants import Region
 from exact_online.exceptions import (
     TokenExpiredError,
     TokenRefreshError,
@@ -18,6 +17,11 @@ from exact_online.exceptions import (
 logger = logging.getLogger("exact_online.auth")
 
 _REFRESH_BUFFER_SECONDS = 30
+
+# Exact Online NL endpoints (hardcoded - only NL region supported)
+_BASE_URL = "https://start.exactonline.nl"
+_API_URL = f"{_BASE_URL}/api/v1"
+_TOKEN_URL = f"{_BASE_URL}/api/oauth2/token"
 
 
 class TokenData(BaseModel):
@@ -104,7 +108,6 @@ class OAuth:
         client_id: str,
         client_secret: str,
         redirect_uri: str,
-        region: Region,
         token_storage: TokenStorage,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
@@ -114,15 +117,14 @@ class OAuth:
             client_id: Your Exact Online app client ID.
             client_secret: Your Exact Online app client secret.
             redirect_uri: The redirect URI registered with your app.
-            region: The Exact Online region to use.
             token_storage: Implementation of TokenStorage for persisting tokens.
             http_client: Optional httpx client (created if not provided).
         """
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
-        self.region = region
         self.token_storage = token_storage
+        self.api_url = _API_URL
 
         self._http_client = http_client
         self._owns_http_client = http_client is None
@@ -153,7 +155,7 @@ class OAuth:
 
         try:
             response = await http.post(
-                self.region.token_url,
+                _TOKEN_URL,
                 data={
                     "grant_type": "authorization_code",
                     "code": code,
@@ -224,7 +226,7 @@ class OAuth:
 
         try:
             response = await http.post(
-                self.region.token_url,
+                _TOKEN_URL,
                 data={
                     "grant_type": "refresh_token",
                     "refresh_token": current_tokens.refresh_token,

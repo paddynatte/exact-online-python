@@ -3,21 +3,20 @@
 import pytest
 from pytest_httpx import HTTPXMock
 
-from exact_online import OAuth, Region, TokenData
+from exact_online import OAuth, TokenData
 from exact_online.exceptions import TokenExpiredError, TokenRefreshError
 
 from .conftest import MockTokenStorage
 
 
 @pytest.fixture
-def oauth(region: Region) -> OAuth:
+def oauth() -> OAuth:
     """OAuth with empty storage."""
     storage = MockTokenStorage()
     return OAuth(
         client_id="test_client_id",
         client_secret="test_client_secret",
         redirect_uri="https://example.com/callback",
-        region=region,
         token_storage=storage,
     )
 

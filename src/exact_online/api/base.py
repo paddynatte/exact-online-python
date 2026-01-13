@@ -3,15 +3,35 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel
 
-from exact_online.models.base import ListResult, SyncResult
+from exact_online.models.base import ListResult, ModifiedSyncResult, SyncResult
 
 if TYPE_CHECKING:
     from exact_online.client import Client
+
+
+def _to_pascal(key: str) -> str:
+    """Convert snake_case to PascalCase (e.g., supplier_id -> SupplierId)."""
+    return "".join(word.capitalize() for word in key.split("_"))
+
+
+def _convert_to_api(data: Any) -> Any:
+    """Recursively convert snake_case dict keys to PascalCase for Exact Online API."""
+    if isinstance(data, dict):
+        return {_to_pascal(k): _convert_to_api(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [_convert_to_api(item) for item in data]
+    return data
+
+
+def _has_snake_keys(data: dict[str, Any]) -> bool:
+    """Check if any dict keys contain underscores (snake_case)."""
+    return any("_" in key for key in data)
 
 
 class BaseAPI[TModel: BaseModel]:
@@ -19,6 +39,10 @@ class BaseAPI[TModel: BaseModel]:
 
     Provides common CRUD operations and optional sync support.
     Subclasses define ENDPOINT, SYNC_ENDPOINT (optional), and MODEL.
+
+    Data passed to create() and update() can use either:
+    - snake_case keys (e.g., "warehouse_from") - auto-converted to PascalCase
+    - PascalCase keys (e.g., "WarehouseFrom") - used as-is
     """
 
     ENDPOINT: ClassVar[str]
@@ -27,12 +51,14 @@ class BaseAPI[TModel: BaseModel]:
     ID_FIELD: ClassVar[str] = "ID"
 
     def __init__(self, client: Client) -> None:
-        """Initialize the API resource.
-
-        Args:
-            client: The Client instance.
-        """
+        """Initialize the API resource."""
         self._client = client
+
+    def _prepare_data(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Prepare data for API request, converting snake_case to PascalCase if needed."""
+        if _has_snake_keys(data):
+            return _convert_to_api(data)
+        return data
 
     def _parse_list_response(
         self, response: dict[str, Any]
@@ -55,10 +81,7 @@ class BaseAPI[TModel: BaseModel]:
         else:
             results, next_url = data.get("results", []), data.get("__next")
 
-        items = cast(
-            list[TModel],
-            [self.MODEL.model_validate(item) for item in results],
-        )
+        items = cast(list[TModel], [self.MODEL.model_validate(item) for item in results])
         return items, next_url
 
     async def list(
@@ -156,7 +179,7 @@ class BaseAPI[TModel: BaseModel]:
             select: List of fields to return.
 
         Yields:
-            Individual model instances.
+            Individual Pydantic model instances.
         """
         result = await self.list(
             division=division,
@@ -180,7 +203,7 @@ class BaseAPI[TModel: BaseModel]:
             id: The record's unique identifier (GUID).
 
         Returns:
-            The model instance.
+            The Pydantic model instance.
         """
         endpoint = f"{self.ENDPOINT}(guid'{id}')"
 
@@ -196,43 +219,52 @@ class BaseAPI[TModel: BaseModel]:
     async def create(self, division: int, data: dict[str, Any]) -> TModel:
         """Create a new record.
 
+        Data can use either snake_case or PascalCase keys:
+        - snake_case: {"warehouse_from": "guid", "description": "Test"}
+        - PascalCase: {"WarehouseFrom": "guid", "Description": "Test"}
+
         Args:
             division: The division ID.
-            data: The record data (use API field names like "Supplier").
+            data: The record data (snake_case auto-converted to PascalCase).
 
         Returns:
-            The created model instance.
+            The created Pydantic model instance.
         """
+        api_data = self._prepare_data(data)
+
         response = await self._client.request(
             method="POST",
             endpoint=self.ENDPOINT,
             division=division,
-            json=data,
+            json=api_data,
         )
 
         result = response.get("d", response)
         return cast(TModel, self.MODEL.model_validate(result))
 
-    async def update(
-        self, division: int, id: str, data: dict[str, Any]
-    ) -> TModel:
+    async def update(self, division: int, id: str, data: dict[str, Any]) -> TModel:
         """Update an existing record.
+
+        Data can use either snake_case or PascalCase keys:
+        - snake_case: {"description": "Updated", "status": 50}
+        - PascalCase: {"Description": "Updated", "Status": 50}
 
         Args:
             division: The division ID.
             id: The record's unique identifier (GUID).
-            data: The fields to update (use API field names).
+            data: The fields to update (snake_case auto-converted to PascalCase).
 
         Returns:
-            The updated model instance.
+            The updated Pydantic model instance.
         """
         endpoint = f"{self.ENDPOINT}(guid'{id}')"
+        api_data = self._prepare_data(data)
 
         response = await self._client.request(
             method="PUT",
             endpoint=endpoint,
             division=division,
-            json=data,
+            json=api_data,
         )
 
         result = response.get("d", response)
@@ -305,10 +337,7 @@ class BaseAPI[TModel: BaseModel]:
         data = response.get("d", {})
         results = data if isinstance(data, list) else data.get("results", [])
 
-        items = cast(
-            list[TModel],
-            [self.MODEL.model_validate(item) for item in results],
-        )
+        items = cast(list[TModel], [self.MODEL.model_validate(item) for item in results])
 
         next_timestamp = timestamp
         for item in results:
@@ -327,4 +356,54 @@ class BaseAPI[TModel: BaseModel]:
             items=items,
             timestamp=next_timestamp,
             has_more=has_more,
+        )
+
+    async def sync_by_modified(
+        self,
+        division: int,
+        *,
+        modified_since: datetime | None = None,
+        select: Sequence[str] | None = None,
+        top: int = 1000,
+    ) -> ModifiedSyncResult[TModel]:
+        """Sync records by Modified date (for entities without sync endpoint).
+
+        Use this for entities like WarehouseTransfers that don't have a
+        dedicated /sync/ endpoint. Falls back to filtering by Modified datetime.
+
+        Args:
+            division: The division ID.
+            modified_since: Only return records modified after this datetime.
+            select: Optional list of fields to return.
+            top: Maximum records to return (default 1000).
+
+        Returns:
+            ModifiedSyncResult with items and last_modified timestamp.
+        """
+        odata_filter: str | None = None
+        if modified_since:
+            iso = modified_since.strftime("%Y-%m-%dT%H:%M:%S")
+            odata_filter = f"Modified gt datetime'{iso}'"
+
+        items: list[TModel] = []
+        async for item in self.list_all(
+            division=division,
+            odata_filter=odata_filter,
+            select=select,
+        ):
+            items.append(item)
+            if len(items) >= top:
+                break
+
+        # Find highest Modified timestamp
+        last_modified: datetime | None = None
+        for item in items:
+            if hasattr(item, "modified") and item.modified:
+                if last_modified is None or item.modified > last_modified:
+                    last_modified = item.modified
+
+        return ModifiedSyncResult(
+            items=items,
+            last_modified=last_modified,
+            has_more=len(items) >= top,
         )

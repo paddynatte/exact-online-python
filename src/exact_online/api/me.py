@@ -20,24 +20,17 @@ class MeAPI:
         me = await client.me.current()
         print(f"Logged in as {me.full_name}")
         print(f"Current division: {me.current_division}")
-
-        for div in me.user_divisions or []:
-            print(f"  Division {div.division}: {div.description}")
     """
 
     def __init__(self, client: Client) -> None:
-        """Initialize the API resource.
-
-        Args:
-            client: The Client instance.
-        """
+        """Initialize the API resource."""
         self._client = client
 
     async def current(self) -> Me:
         """Get the current user's information.
 
         Returns:
-            Me object containing user info and accessible divisions.
+            Me model with user info and accessible divisions.
         """
         response = await self._client.request_without_division(
             method="GET",

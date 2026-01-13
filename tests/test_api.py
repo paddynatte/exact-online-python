@@ -8,7 +8,6 @@ from pytest_httpx import HTTPXMock
 from exact_online import (
     Client,
     OAuth,
-    Region,
     TokenData,
 )
 from exact_online.models.base import (
@@ -21,14 +20,13 @@ from .conftest import MockTokenStorage
 
 
 @pytest.fixture
-def oauth(valid_token_data: TokenData, region: Region) -> OAuth:
+def oauth(valid_token_data: TokenData) -> OAuth:
     """OAuth with valid tokens."""
     storage = MockTokenStorage(initial_tokens=valid_token_data)
     return OAuth(
         client_id="test_client_id",
         client_secret="test_client_secret",
         redirect_uri="https://example.com/callback",
-        region=region,
         token_storage=storage,
     )
 
