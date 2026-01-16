@@ -14,6 +14,7 @@ from exact_online.api.stock_counts import StockCountsAPI
 from exact_online.api.supplier_items import SupplierItemsAPI
 from exact_online.api.units import UnitsAPI
 from exact_online.api.warehouse_transfers import WarehouseTransfersAPI
+from exact_online.api.warehouses import WarehousesAPI
 
 __all__ = [
     "BaseAPI",
@@ -29,5 +30,6 @@ __all__ = [
     "StockCountsAPI",
     "SupplierItemsAPI",
     "UnitsAPI",
+    "WarehousesAPI",
     "WarehouseTransfersAPI",
 ]

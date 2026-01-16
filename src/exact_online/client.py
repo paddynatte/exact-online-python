@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from exact_online.api.supplier_items import SupplierItemsAPI
     from exact_online.api.units import UnitsAPI
     from exact_online.api.warehouse_transfers import WarehouseTransfersAPI
+    from exact_online.api.warehouses import WarehousesAPI
     from exact_online.batch import BatchRequest, BatchResult
 
 
@@ -107,6 +108,7 @@ class Client:
         self._stock_count_lines: StockCountLinesAPI | None = None
         self._supplier_items: SupplierItemsAPI | None = None
         self._units: UnitsAPI | None = None
+        self._warehouses: WarehousesAPI | None = None
 
     async def _get_http_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client.
@@ -342,6 +344,15 @@ class Client:
 
             self._units = UnitsAPI(self)
         return self._units
+
+    @property
+    def warehouses(self) -> WarehousesAPI:
+        """Access the Warehouses API."""
+        if self._warehouses is None:
+            from exact_online.api.warehouses import WarehousesAPI
+
+            self._warehouses = WarehousesAPI(self)
+        return self._warehouses
 
     async def request(
         self,
