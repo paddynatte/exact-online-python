@@ -4,6 +4,7 @@ from exact_online.models.base import (
     ExactBaseModel,
     ListResult,
 )
+from exact_online.models.division import Division
 from exact_online.models.goods_receipt import GoodsReceipt, GoodsReceiptLine
 from exact_online.models.me import Me
 from exact_online.models.purchase_order import PurchaseOrder, PurchaseOrderLine
@@ -15,6 +16,7 @@ from exact_online.models.unit import Unit
 from exact_online.models.warehouse_transfer import WarehouseTransfer
 
 __all__ = [
+    "Division",
     "ExactBaseModel",
     "GoodsReceipt",
     "GoodsReceiptLine",

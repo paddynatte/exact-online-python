@@ -17,6 +17,7 @@ from exact_online.retry import RetryableError, RetryConfig, with_retry
 logger = logging.getLogger("exact_online.client")
 
 if TYPE_CHECKING:
+    from exact_online.api.divisions import DivisionsAPI
     from exact_online.api.goods_receipt_lines import GoodsReceiptLinesAPI
     from exact_online.api.goods_receipts import GoodsReceiptsAPI
     from exact_online.api.me import MeAPI
@@ -94,6 +95,7 @@ class Client:
             self._retry_config = retry
 
         self._me: MeAPI | None = None
+        self._divisions: DivisionsAPI | None = None
         self._purchase_orders: PurchaseOrdersAPI | None = None
         self._purchase_order_lines: PurchaseOrderLinesAPI | None = None
         self._sales_orders: SalesOrdersAPI | None = None
@@ -230,6 +232,15 @@ class Client:
 
             self._me = MeAPI(self)
         return self._me
+
+    @property
+    def divisions(self) -> DivisionsAPI:
+        """Access the Divisions API (read-only)."""
+        if self._divisions is None:
+            from exact_online.api.divisions import DivisionsAPI
+
+            self._divisions = DivisionsAPI(self)
+        return self._divisions
 
     @property
     def purchase_orders(self) -> PurchaseOrdersAPI:

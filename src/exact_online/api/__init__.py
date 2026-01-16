@@ -1,6 +1,7 @@
 """API resources for Exact Online."""
 
 from exact_online.api.base import BaseAPI
+from exact_online.api.divisions import DivisionsAPI
 from exact_online.api.goods_receipt_lines import GoodsReceiptLinesAPI
 from exact_online.api.goods_receipts import GoodsReceiptsAPI
 from exact_online.api.me import MeAPI
@@ -16,6 +17,7 @@ from exact_online.api.warehouse_transfers import WarehouseTransfersAPI
 
 __all__ = [
     "BaseAPI",
+    "DivisionsAPI",
     "GoodsReceiptLinesAPI",
     "GoodsReceiptsAPI",
     "MeAPI",
