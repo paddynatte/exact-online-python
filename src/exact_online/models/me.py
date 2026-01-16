@@ -26,7 +26,6 @@ class Me(ExactBaseModel):
     email: str | None = Field(default=None, alias="Email")
     picture_url: str | None = Field(default=None, alias="PictureUrl")
     language_code: str | None = Field(default=None, alias="LanguageCode")
-
     current_division: int = Field(alias="CurrentDivision")
     division_customer: UUID | None = Field(default=None, alias="DivisionCustomer")
     division_customer_code: str | None = Field(

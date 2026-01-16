@@ -10,6 +10,8 @@ from exact_online.models.purchase_order import PurchaseOrder, PurchaseOrderLine
 from exact_online.models.sales_order import SalesOrder
 from exact_online.models.shop_order import ShopOrder
 from exact_online.models.stock_count import StockCount, StockCountLine
+from exact_online.models.supplier_item import SupplierItem
+from exact_online.models.unit import Unit
 from exact_online.models.warehouse_transfer import WarehouseTransfer
 
 __all__ = [
@@ -24,5 +26,7 @@ __all__ = [
     "ShopOrder",
     "StockCount",
     "StockCountLine",
+    "SupplierItem",
+    "Unit",
     "WarehouseTransfer",
 ]

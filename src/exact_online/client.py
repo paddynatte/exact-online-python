@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from exact_online.api.shop_orders import ShopOrdersAPI
     from exact_online.api.stock_count_lines import StockCountLinesAPI
     from exact_online.api.stock_counts import StockCountsAPI
+    from exact_online.api.supplier_items import SupplierItemsAPI
+    from exact_online.api.units import UnitsAPI
     from exact_online.api.warehouse_transfers import WarehouseTransfersAPI
     from exact_online.batch import BatchRequest, BatchResult
 
@@ -101,6 +103,8 @@ class Client:
         self._goods_receipt_lines: GoodsReceiptLinesAPI | None = None
         self._stock_counts: StockCountsAPI | None = None
         self._stock_count_lines: StockCountLinesAPI | None = None
+        self._supplier_items: SupplierItemsAPI | None = None
+        self._units: UnitsAPI | None = None
 
     async def _get_http_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client.
@@ -309,6 +313,24 @@ class Client:
 
             self._stock_count_lines = StockCountLinesAPI(self)
         return self._stock_count_lines
+
+    @property
+    def supplier_items(self) -> SupplierItemsAPI:
+        """Access the Supplier Items API."""
+        if self._supplier_items is None:
+            from exact_online.api.supplier_items import SupplierItemsAPI
+
+            self._supplier_items = SupplierItemsAPI(self)
+        return self._supplier_items
+
+    @property
+    def units(self) -> UnitsAPI:
+        """Access the Units API (read-only)."""
+        if self._units is None:
+            from exact_online.api.units import UnitsAPI
+
+            self._units = UnitsAPI(self)
+        return self._units
 
     async def request(
         self,
