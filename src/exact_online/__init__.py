@@ -9,7 +9,7 @@ from exact_online.client import Client
 from exact_online.exceptions import (
     APIError,
     AuthenticationError,
-    ExactOnlineError,
+    BaseError,
     RateLimitError,
     TokenExpiredError,
     TokenRefreshError,
@@ -33,7 +33,7 @@ __all__ = [
     "RetryConfig",
     "APIError",
     "AuthenticationError",
-    "ExactOnlineError",
+    "BaseError",
     "RateLimitError",
     "TokenExpiredError",
     "TokenRefreshError",

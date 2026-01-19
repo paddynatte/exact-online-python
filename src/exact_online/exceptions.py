@@ -1,11 +1,11 @@
 """Exceptions for the Exact Online Python SDK."""
 
 
-class ExactOnlineError(Exception):
+class BaseError(Exception):
     """Base exception for all SDK errors."""
 
 
-class AuthenticationError(ExactOnlineError):
+class AuthenticationError(BaseError):
     """Authentication or authorization failure."""
 
 
@@ -17,11 +17,11 @@ class TokenRefreshError(AuthenticationError):
     """Token refresh failed."""
 
 
-class RateLimitError(ExactOnlineError):
+class RateLimitError(BaseError):
     """API rate limit exceeded."""
 
 
-class APIError(ExactOnlineError):
+class APIError(BaseError):
     """General API error with status code and message."""
 
     def __init__(self, status_code: int, message: str) -> None:

@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from exact_online import TokenData
+from exact_online import SyncState, TokenData
 
 
 @pytest.fixture
@@ -41,11 +41,12 @@ def expired_token_data() -> TokenData:
 
 
 class MockTokenStorage:
-    """In-memory token storage for testing."""
+    """In-memory token storage for testing with sync state support."""
 
     def __init__(self, initial_tokens: TokenData | None = None) -> None:
         self.tokens = initial_tokens
         self.save_count = 0
+        self._sync_states: dict[str, SyncState] = {}
 
     async def get_tokens(self) -> TokenData | None:
         return self.tokens
@@ -53,6 +54,16 @@ class MockTokenStorage:
     async def save_tokens(self, tokens: TokenData) -> None:
         self.tokens = tokens
         self.save_count += 1
+
+    async def get_sync_state(self, division: int, resource: str) -> SyncState | None:
+        key = f"{division}:{resource}"
+        return self._sync_states.get(key)
+
+    async def save_sync_state(
+        self, division: int, resource: str, state: SyncState
+    ) -> None:
+        key = f"{division}:{resource}"
+        self._sync_states[key] = state
 
 
 @pytest.fixture
