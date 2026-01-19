@@ -10,32 +10,26 @@ class WarehousesAPI(BaseAPI[Warehouse]):
     """API resource for Warehouses.
 
     Warehouses are locations where inventory is stored.
-    Supports full CRUD operations (GET, POST, PUT, DELETE).
+    Supports full CRUD operations and sync():
+    - list, get, create, update, delete
+    - sync() uses Modified filter (no Sync API support)
 
     Usage:
-        # List all warehouses
         warehouses = await client.warehouses.list(division=123)
 
-        # Get a specific warehouse
         warehouse = await client.warehouses.get(division=123, id="guid")
 
-        # Create a warehouse
         warehouse = await client.warehouses.create(
             division=123,
             data={"code": "WH01", "description": "Main Warehouse"}
         )
 
-        # Update a warehouse
-        warehouse = await client.warehouses.update(
-            division=123,
-            id="guid",
-            data={"description": "Updated Description"}
-        )
-
-        # Delete a warehouse
-        await client.warehouses.delete(division=123, id="guid")
+        # Incremental sync (uses Modified filter)
+        async for warehouse in client.warehouses.sync(division):
+            await db.merge(warehouse)
     """
 
     ENDPOINT: ClassVar[str] = "/inventory/Warehouses"
     MODEL: ClassVar[type[Warehouse]] = Warehouse
     ID_FIELD: ClassVar[str] = "ID"
+    RESOURCE_NAME: ClassVar[str] = "warehouses"

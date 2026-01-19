@@ -9,7 +9,9 @@ from exact_online.models.stock_count import StockCount
 class StockCountsAPI(BaseAPI[StockCount]):
     """API resource for Stock Counts.
 
-    Supports full CRUD operations: list, get, create, update, delete.
+    Supports full CRUD operations and sync():
+    - list, get, create, update, delete
+    - sync() uses Modified filter (no Sync API support)
 
     Status values:
         12 - Open (draft)
@@ -34,8 +36,13 @@ class StockCountsAPI(BaseAPI[StockCount]):
                 ]
             }
         )
+
+        # Incremental sync (uses Modified filter)
+        async for count in client.stock_counts.sync(division):
+            await db.merge(count)
     """
 
     ENDPOINT: ClassVar[str] = "/inventory/StockCounts"
     MODEL: ClassVar[type[StockCount]] = StockCount
     ID_FIELD: ClassVar[str] = "StockCountID"
+    RESOURCE_NAME: ClassVar[str] = "stock_counts"

@@ -12,25 +12,23 @@ class DivisionsAPI(BaseAPI[Division]):
     Returns only divisions that are accessible to the signed-in user.
     The primary key is `Code` (int), not a UUID like other entities.
 
-    This endpoint only supports GET operations.
+    This endpoint only supports GET operations and sync():
+    - sync() uses Modified filter (no Sync API support)
 
     Usage:
-        # List all accessible divisions
         divisions = await client.divisions.list(division=123)
 
-        # Get a specific division by code
         division = await client.divisions.get(division=123, id="456")
 
-        # Filter by country
-        divisions = await client.divisions.list(
-            division=123,
-            odata_filter="Country eq 'NL'"
-        )
+        # Incremental sync (uses Modified filter)
+        async for division in client.divisions.sync(division):
+            await db.merge(division)
     """
 
     ENDPOINT: ClassVar[str] = "/hrm/Divisions"
     MODEL: ClassVar[type[Division]] = Division
     ID_FIELD: ClassVar[str] = "Code"
+    RESOURCE_NAME: ClassVar[str] = "divisions"
 
     async def create(self, division: int, data: dict[str, Any]) -> Division:
         """Not supported - Divisions endpoint is read-only."""

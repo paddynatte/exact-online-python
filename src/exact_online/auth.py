@@ -68,6 +68,16 @@ class TokenData(BaseModel):
         )
 
 
+class SyncState(BaseModel):
+    """Tracks sync progress for a resource.
+
+    Used by TokenStorage to persist sync state between runs.
+    """
+
+    timestamp: int = 1  # Row version for Sync API (start with 1)
+    last_sync: datetime  # When the last sync completed
+
+
 class TokenStorage(Protocol):
     """Protocol for token storage implementations.
 
@@ -75,12 +85,21 @@ class TokenStorage(Protocol):
     This is critical because Exact Online rotates refresh tokens
     on every refresh - if you don't persist the new token, you lose access.
 
+    Optionally implement get_sync_state/save_sync_state for sync() support.
+
     Example:
         class MyTokenStorage:
             async def get_tokens(self) -> TokenData | None:
                 ...
 
             async def save_tokens(self, tokens: TokenData) -> None:
+                ...
+
+            # Optional: for sync() support
+            async def get_sync_state(self, division: int, resource: str) -> SyncState | None:
+                ...
+
+            async def save_sync_state(self, division: int, resource: str, state: SyncState) -> None:
                 ...
     """
 
@@ -90,6 +109,34 @@ class TokenStorage(Protocol):
 
     async def save_tokens(self, tokens: TokenData) -> None:
         """Persist tokens after refresh or initial exchange."""
+        ...
+
+    async def get_sync_state(self, division: int, resource: str) -> SyncState | None:
+        """Retrieve sync state for a resource. Return None for first sync.
+
+        Optional: Only needed if using api.sync() method.
+
+        Args:
+            division: The division ID.
+            resource: Resource name (e.g., "purchase_orders", "_deleted").
+
+        Returns:
+            SyncState if previously synced, None for first sync.
+        """
+        ...
+
+    async def save_sync_state(
+        self, division: int, resource: str, state: SyncState
+    ) -> None:
+        """Persist sync state after syncing.
+
+        Optional: Only needed if using api.sync() method.
+
+        Args:
+            division: The division ID.
+            resource: Resource name (e.g., "purchase_orders", "_deleted").
+            state: The sync state to persist.
+        """
         ...
 
 

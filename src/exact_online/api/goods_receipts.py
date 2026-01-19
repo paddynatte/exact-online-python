@@ -9,7 +9,9 @@ from exact_online.models.goods_receipt import GoodsReceipt
 class GoodsReceiptsAPI(BaseAPI[GoodsReceipt]):
     """API resource for Goods Receipts.
 
-    Supports full CRUD operations: list, get, create, update, delete.
+    Supports full CRUD operations and sync():
+    - list, get, create, update, delete
+    - sync() uses Modified filter (no Sync API support)
 
     Note: For creating a GoodsReceipt, you must supply one or more
     GoodsReceiptLines and a ReceiptDate.
@@ -28,8 +30,13 @@ class GoodsReceiptsAPI(BaseAPI[GoodsReceipt]):
                 ]
             }
         )
+
+        # Incremental sync (uses Modified filter)
+        async for receipt in client.goods_receipts.sync(division):
+            await db.merge(receipt)
     """
 
     ENDPOINT: ClassVar[str] = "/purchaseorder/GoodsReceipts"
     MODEL: ClassVar[type[GoodsReceipt]] = GoodsReceipt
     ID_FIELD: ClassVar[str] = "ID"
+    RESOURCE_NAME: ClassVar[str] = "goods_receipts"

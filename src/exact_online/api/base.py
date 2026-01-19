@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel
 
+from exact_online.auth import SyncState
 from exact_online.models.base import ListResult
 
 if TYPE_CHECKING:
@@ -42,11 +44,17 @@ class BaseAPI[TModel: BaseModel]:
     Data passed to create() and update() can use either:
     - snake_case keys (e.g., "warehouse_from") - auto-converted to PascalCase
     - PascalCase keys (e.g., "WarehouseFrom") - used as-is
+
+    For sync() support, subclasses can define:
+    - SYNC_ENDPOINT: Uses Sync API (1000 records/call) if set
+    - RESOURCE_NAME: Used as key for storing sync state
     """
 
     ENDPOINT: ClassVar[str]
     MODEL: ClassVar[type[BaseModel]]
     ID_FIELD: ClassVar[str] = "ID"
+    SYNC_ENDPOINT: ClassVar[str | None] = None  # e.g., "/sync/PurchaseOrder/PurchaseOrders"
+    RESOURCE_NAME: ClassVar[str] = ""  # e.g., "purchase_orders" - for sync state storage
 
     def __init__(self, client: Client) -> None:
         """Initialize the API resource."""
@@ -192,6 +200,101 @@ class BaseAPI[TModel: BaseModel]:
             result = await self.list_next(result.next_url, division=division)
             for item in result.items:
                 yield item
+
+    async def sync(
+        self,
+        division: int,
+        *,
+        select: Sequence[str] | None = None,
+    ) -> AsyncIterator[TModel]:
+        """Yield new/changed records since last sync.
+
+        Automatically manages sync state via TokenStorage:
+        - Loads last timestamp/modified date
+        - Yields all changed records (handles pagination)
+        - Saves new state when complete
+
+        Uses Sync API (1000 records/call) if SYNC_ENDPOINT is defined,
+        otherwise falls back to Modified filter (60 records/call).
+
+        Requires TokenStorage to implement get_sync_state/save_sync_state.
+
+        Args:
+            division: The division ID.
+            select: List of fields to return.
+
+        Yields:
+            Individual Pydantic model instances that changed since last sync.
+
+        Example:
+            async for order in client.purchase_orders.sync(division):
+                await db.merge(PurchaseOrderORM.from_exact(order))
+        """
+        if not self.RESOURCE_NAME:
+            raise NotImplementedError(
+                f"{self.__class__.__name__} does not define RESOURCE_NAME for sync"
+            )
+
+        # Load last sync state
+        storage = self._client.oauth.token_storage
+        state = await storage.get_sync_state(division, self.RESOURCE_NAME)
+        
+        # Determine endpoint and filter based on Sync API support
+        if self.SYNC_ENDPOINT:
+            # Sync API: 1000 records per call, timestamp-based
+            endpoint = self.SYNC_ENDPOINT
+            timestamp = state.timestamp if state else 1
+            params: dict[str, Any] = {"$filter": f"Timestamp gt {timestamp}"}
+        else:
+            # Fallback: Modified filter, 60 records per call
+            endpoint = self.ENDPOINT
+            if state and state.last_sync:
+                modified = state.last_sync.strftime("%Y-%m-%dT%H:%M:%S")
+                params = {"$filter": f"Modified ge datetime'{modified}'"}
+            else:
+                # First sync - get everything
+                params = {}
+
+        if select:
+            params["$select"] = ",".join(select)
+
+        highest_timestamp = state.timestamp if state else 1
+
+        # Paginate through all results
+        while True:
+            response = await self._client.request(
+                method="GET",
+                endpoint=endpoint,
+                division=division,
+                params=params,
+            )
+
+            items, next_url = self._parse_list_response(response)
+
+            for item in items:
+                yield item
+                # Track highest timestamp for Sync API resources
+                if self.SYNC_ENDPOINT and hasattr(item, "timestamp"):
+                    item_timestamp = getattr(item, "timestamp", 0)
+                    if item_timestamp and item_timestamp > highest_timestamp:
+                        highest_timestamp = item_timestamp
+
+            if not next_url:
+                break
+
+            # Parse next_url for pagination
+            parsed = urlparse(next_url)
+            params = {}
+            if parsed.query:
+                for key, values in parse_qs(parsed.query).items():
+                    params[key] = values[0] if values else ""
+
+        # Save new sync state
+        new_state = SyncState(
+            timestamp=highest_timestamp,
+            last_sync=datetime.now(UTC),
+        )
+        await storage.save_sync_state(division, self.RESOURCE_NAME, new_state)
 
     async def get(self, division: int, id: str) -> TModel:
         """Get a single record by ID.

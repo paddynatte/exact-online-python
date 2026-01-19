@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlparse
 
 import httpx
 
-from exact_online.auth import OAuth
+from exact_online.auth import OAuth, SyncState
 from exact_online.exceptions import APIError, RateLimitError
+from exact_online.models.sync import DeletedRecord, EntityType
 from exact_online.rate_limiter import RateLimiter
 from exact_online.retry import RetryableError, RetryConfig, with_retry
 
@@ -353,6 +356,89 @@ class Client:
 
             self._warehouses = WarehousesAPI(self)
         return self._warehouses
+
+    async def sync_deleted(
+        self,
+        division: int,
+        entity_types: list[EntityType] | None = None,
+    ) -> AsyncIterator[DeletedRecord]:
+        """Yield deleted records from Exact Online.
+
+        Fetches records from the central /sync/Deleted endpoint.
+        Automatically manages sync state via TokenStorage.
+
+        Args:
+            division: The division ID.
+            entity_types: Optional filter to specific entity types.
+                If None, returns all deleted records.
+
+        Yields:
+            DeletedRecord instances with entity_key (the deleted record's ID)
+            and entity_type (which resource was deleted).
+
+        Example:
+            async for deleted in client.sync_deleted(division):
+                match deleted.entity_type:
+                    case EntityType.PURCHASE_ORDERS:
+                        await db.execute(delete(PurchaseOrder).where(id=deleted.entity_key))
+                    case EntityType.SALES_ORDER_HEADERS:
+                        await db.execute(delete(SalesOrder).where(id=deleted.entity_key))
+
+        Note:
+            Exact Online only keeps deleted records for 2 months.
+            If you don't sync for 2+ months, you may miss deletions.
+        """
+        storage = self.oauth.token_storage
+        state = await storage.get_sync_state(division, "_deleted")
+        timestamp = state.timestamp if state else 1
+
+        params: dict[str, Any] = {"$filter": f"Timestamp gt {timestamp}"}
+        endpoint = "/sync/Deleted"
+
+        highest_timestamp = timestamp
+
+        while True:
+            response = await self.request(
+                method="GET",
+                endpoint=endpoint,
+                division=division,
+                params=params,
+            )
+
+            # Parse response
+            data = response.get("d", {})
+            if isinstance(data, list):
+                results, next_url = data, None
+            else:
+                results, next_url = data.get("results", []), data.get("__next")
+
+            for item in results:
+                record = DeletedRecord.model_validate(item)
+
+                # Filter by entity type if specified
+                if entity_types is None or record.entity_type in [e.value for e in entity_types]:
+                    yield record
+
+                # Track highest timestamp
+                if record.timestamp > highest_timestamp:
+                    highest_timestamp = record.timestamp
+
+            if not next_url:
+                break
+
+            # Parse next_url for pagination
+            parsed = urlparse(next_url)
+            params = {}
+            if parsed.query:
+                for key, values in parse_qs(parsed.query).items():
+                    params[key] = values[0] if values else ""
+
+        # Save new sync state
+        new_state = SyncState(
+            timestamp=highest_timestamp,
+            last_sync=datetime.now(UTC),
+        )
+        await storage.save_sync_state(division, "_deleted", new_state)
 
     async def request(
         self,

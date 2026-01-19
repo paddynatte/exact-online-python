@@ -9,7 +9,9 @@ from exact_online.models.warehouse_transfer import WarehouseTransfer
 class WarehouseTransfersAPI(BaseAPI[WarehouseTransfer]):
     """API resource for Warehouse Transfers.
 
-    Supports full CRUD operations: list, get, create, update, delete.
+    Supports full CRUD operations and sync():
+    - list, get, create, update, delete
+    - sync() uses Modified filter (no Sync API support)
 
     When WarehouseFrom equals WarehouseTo, it's a location transfer.
 
@@ -26,8 +28,13 @@ class WarehouseTransfersAPI(BaseAPI[WarehouseTransfer]):
                 "warehouse_transfer_lines": [...]
             }
         )
+
+        # Incremental sync (uses Modified filter)
+        async for transfer in client.warehouse_transfers.sync(division):
+            await db.merge(transfer)
     """
 
     ENDPOINT: ClassVar[str] = "/inventory/WarehouseTransfers"
     MODEL: ClassVar[type[WarehouseTransfer]] = WarehouseTransfer
     ID_FIELD: ClassVar[str] = "TransferID"
+    RESOURCE_NAME: ClassVar[str] = "warehouse_transfers"

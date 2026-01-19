@@ -3,7 +3,7 @@
 A minimal Python SDK for the Exact Online API.
 """
 
-from exact_online.auth import OAuth, TokenData, TokenStorage
+from exact_online.auth import OAuth, SyncState, TokenData, TokenStorage
 from exact_online.batch import BatchRequest, BatchResponse, BatchResult
 from exact_online.client import Client
 from exact_online.exceptions import (
@@ -15,16 +15,20 @@ from exact_online.exceptions import (
     TokenRefreshError,
 )
 from exact_online.models.base import ListResult
+from exact_online.models.sync import DeletedRecord, EntityType
 from exact_online.retry import RetryConfig
 
 __all__ = [
     "Client",
     "OAuth",
+    "SyncState",
     "TokenData",
     "TokenStorage",
     "BatchRequest",
     "BatchResponse",
     "BatchResult",
+    "DeletedRecord",
+    "EntityType",
     "ListResult",
     "RetryConfig",
     "APIError",
