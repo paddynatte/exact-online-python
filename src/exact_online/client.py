@@ -20,6 +20,7 @@ from exact_online.retry import RetryableError, RetryConfig, with_retry
 logger = logging.getLogger("exact_online.client")
 
 if TYPE_CHECKING:
+    from exact_online.api.accounts import AccountsAPI
     from exact_online.api.divisions import DivisionsAPI
     from exact_online.api.goods_receipt_lines import GoodsReceiptLinesAPI
     from exact_online.api.goods_receipts import GoodsReceiptsAPI
@@ -98,6 +99,7 @@ class Client:
         else:
             self._retry_config = retry
 
+        self._accounts: AccountsAPI | None = None
         self._me: MeAPI | None = None
         self._divisions: DivisionsAPI | None = None
         self._purchase_orders: PurchaseOrdersAPI | None = None
@@ -228,6 +230,15 @@ class Client:
             message = self._parse_error_message(response)
             logger.error("API error %d: %s", response.status_code, message)
             raise APIError(response.status_code, message)
+
+    @property
+    def accounts(self) -> AccountsAPI:
+        """Access the CRM Accounts API (customers/suppliers)."""
+        if self._accounts is None:
+            from exact_online.api.accounts import AccountsAPI
+
+            self._accounts = AccountsAPI(self)
+        return self._accounts
 
     @property
     def me(self) -> MeAPI:
