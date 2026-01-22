@@ -24,7 +24,9 @@ if TYPE_CHECKING:
     from exact_online.api.divisions import DivisionsAPI
     from exact_online.api.goods_receipt_lines import GoodsReceiptLinesAPI
     from exact_online.api.goods_receipts import GoodsReceiptsAPI
+    from exact_online.api.items import ItemsAPI
     from exact_online.api.me import MeAPI
+    from exact_online.api.purchase_item_prices import PurchaseItemPricesAPI
     from exact_online.api.purchase_order_lines import PurchaseOrderLinesAPI
     from exact_online.api.purchase_orders import PurchaseOrdersAPI
     from exact_online.api.sales_orders import SalesOrdersAPI
@@ -102,6 +104,8 @@ class Client:
         self._accounts: AccountsAPI | None = None
         self._me: MeAPI | None = None
         self._divisions: DivisionsAPI | None = None
+        self._items: ItemsAPI | None = None
+        self._purchase_item_prices: PurchaseItemPricesAPI | None = None
         self._purchase_orders: PurchaseOrdersAPI | None = None
         self._purchase_order_lines: PurchaseOrderLinesAPI | None = None
         self._sales_orders: SalesOrdersAPI | None = None
@@ -257,6 +261,24 @@ class Client:
 
             self._divisions = DivisionsAPI(self)
         return self._divisions
+
+    @property
+    def items(self) -> ItemsAPI:
+        """Access the Logistics Items API."""
+        if self._items is None:
+            from exact_online.api.items import ItemsAPI
+
+            self._items = ItemsAPI(self)
+        return self._items
+
+    @property
+    def purchase_item_prices(self) -> PurchaseItemPricesAPI:
+        """Access the Purchase Item Prices API (sync-only)."""
+        if self._purchase_item_prices is None:
+            from exact_online.api.purchase_item_prices import PurchaseItemPricesAPI
+
+            self._purchase_item_prices = PurchaseItemPricesAPI(self)
+        return self._purchase_item_prices
 
     @property
     def purchase_orders(self) -> PurchaseOrdersAPI:
