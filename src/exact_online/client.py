@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, quote, urlparse
 
 import httpx
+from pydantic import BaseModel
 
 from exact_online.auth import OAuth, SyncState
 from exact_online.exceptions import APIError, RateLimitError
@@ -389,6 +390,52 @@ class Client:
 
             self._warehouses = WarehousesAPI(self)
         return self._warehouses
+
+    async def sync_all(
+        self, division: int
+    ) -> AsyncIterator[tuple[str, BaseModel]]:
+        """Sync all resources, yielding (resource_name, item) tuples.
+
+        Iterates all syncable APIs, yielding each record with its resource name.
+        Designed for use with Python 3.10+ pattern matching.
+
+        Resource names: accounts, divisions, goods_receipts, items,
+        purchase_item_prices, purchase_orders, sales_orders, shop_orders,
+        stock_counts, warehouse_transfers, warehouses
+
+        Args:
+            division: The division ID.
+
+        Yields:
+            Tuples of (resource_name, item) where resource_name is a string
+            and item is the Pydantic model instance.
+
+        Usage:
+            async for resource_name, item in client.sync_all(division):
+                match resource_name:
+                    case "accounts":
+                        await db.merge(AccountORM.from_exact(item))
+                    case "items":
+                        await db.merge(ItemORM.from_exact(item))
+                    # ... etc
+        """
+        syncable_apis = [
+            self.accounts,
+            self.divisions,
+            self.goods_receipts,
+            self.items,
+            self.purchase_item_prices,
+            self.purchase_orders,
+            self.sales_orders,
+            self.shop_orders,
+            self.stock_counts,
+            self.warehouse_transfers,
+            self.warehouses,
+        ]
+
+        for api in syncable_apis:
+            async for item in api.sync(division):
+                yield (api.RESOURCE_NAME, item)
 
     async def sync_deleted(
         self,

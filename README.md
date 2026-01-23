@@ -295,6 +295,8 @@ The SDK automatically:
 
 ### Background Sync Task
 
+Use `client.sync_all(division)` with Python 3.10+ pattern matching for clean, explicit code:
+
 ```python
 from exact_online import Client, OAuth
 
@@ -310,37 +312,42 @@ async def sync_exact_online(division: int, db: AsyncSession, user_id: UUID):
     )
 
     async with Client(oauth=oauth) as client:
-        # Sync API resources (1000 records/call)
-        async for order in client.purchase_orders.sync(division):
-            await db.merge(PurchaseOrderORM.from_exact(order))
-
-        async for price in client.purchase_item_prices.sync(division):
-            await db.merge(PurchaseItemPriceORM.from_exact(price))
-
-        async for order in client.sales_orders.sync(division):
-            await db.merge(SalesOrderORM.from_exact(order))
-
-        async for order in client.shop_orders.sync(division):
-            await db.merge(ShopOrderORM.from_exact(order))
-
-        # Modified filter resources (60 records/call)
-        async for account in client.accounts.sync(division):
-            await db.merge(AccountORM.from_exact(account))
-
-        async for item in client.items.sync(division):
-            await db.merge(ItemORM.from_exact(item))
-
-        async for transfer in client.warehouse_transfers.sync(division):
-            await db.merge(WarehouseTransferORM.from_exact(transfer))
-
-        async for receipt in client.goods_receipts.sync(division):
-            await db.merge(GoodsReceiptORM.from_exact(receipt))
-
-        async for count in client.stock_counts.sync(division):
-            await db.merge(StockCountORM.from_exact(count))
+        async for resource_name, item in client.sync_all(division):
+            match resource_name:
+                case "accounts":
+                    await db.merge(AccountORM.from_exact(item))
+                case "items":
+                    await db.merge(ItemORM.from_exact(item))
+                case "purchase_orders":
+                    await db.merge(PurchaseOrderORM.from_exact(item))
+                case "purchase_item_prices":
+                    await db.merge(PurchaseItemPriceORM.from_exact(item))
+                case "sales_orders":
+                    await db.merge(SalesOrderORM.from_exact(item))
+                case "shop_orders":
+                    await db.merge(ShopOrderORM.from_exact(item))
+                case "divisions":
+                    await db.merge(DivisionORM.from_exact(item))
+                case "warehouses":
+                    await db.merge(WarehouseORM.from_exact(item))
+                case "warehouse_transfers":
+                    await db.merge(WarehouseTransferORM.from_exact(item))
+                case "goods_receipts":
+                    await db.merge(GoodsReceiptORM.from_exact(item))
+                case "stock_counts":
+                    await db.merge(StockCountORM.from_exact(item))
 
     await db.commit()
     print(f"Sync complete for division {division}")
+```
+
+Or sync individual resources when needed:
+
+```python
+async with Client(oauth=oauth) as client:
+    # Sync only purchase orders
+    async for order in client.purchase_orders.sync(division):
+        await db.merge(PurchaseOrderORM.from_exact(order))
 ```
 
 ### Litestar-SAQ Integration
