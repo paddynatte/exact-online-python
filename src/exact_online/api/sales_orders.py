@@ -2,22 +2,21 @@
 
 from typing import ClassVar
 
-from exact_online.api.base import BaseAPI
+from exact_online.api.base import BaseAPI, ReadableMixin, SyncableMixin, WritableMixin
 from exact_online.models.sales_order import SalesOrder
 
 
-class SalesOrdersAPI(BaseAPI[SalesOrder]):
+class SalesOrdersAPI(
+    BaseAPI[SalesOrder],
+    ReadableMixin[SalesOrder],
+    WritableMixin[SalesOrder],
+    SyncableMixin[SalesOrder],
+):
     """API resource for Sales Orders.
 
-    Supports full CRUD operations and sync():
-    - list, get, create, update, delete
+    Supports:
+    - list(), get(), create(), update(), delete()
     - sync() uses Sync API (1000 records/call)
-
-    Status values:
-        12 - Open
-        20 - Partial
-        21 - Complete
-        45 - Cancelled
 
     Usage:
         orders = await client.sales_orders.list(division=123)

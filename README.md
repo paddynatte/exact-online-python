@@ -276,8 +276,11 @@ For background synchronization of Exact Online data to your database.
 | Resource | Method | Records/Call |
 |----------|--------|--------------|
 | PurchaseOrders | Sync API | 1000 |
+| PurchaseItemPrices | Sync API | 1000 |
 | SalesOrders | Sync API | 1000 |
 | ShopOrders | Sync API | 1000 |
+| Accounts | Modified filter | 60 |
+| Items | Modified filter | 60 |
 | WarehouseTransfers | Modified filter | 60 |
 | GoodsReceipts | Modified filter | 60 |
 | StockCounts | Modified filter | 60 |
@@ -311,6 +314,9 @@ async def sync_exact_online(division: int, db: AsyncSession, user_id: UUID):
         async for order in client.purchase_orders.sync(division):
             await db.merge(PurchaseOrderORM.from_exact(order))
 
+        async for price in client.purchase_item_prices.sync(division):
+            await db.merge(PurchaseItemPriceORM.from_exact(price))
+
         async for order in client.sales_orders.sync(division):
             await db.merge(SalesOrderORM.from_exact(order))
 
@@ -318,6 +324,12 @@ async def sync_exact_online(division: int, db: AsyncSession, user_id: UUID):
             await db.merge(ShopOrderORM.from_exact(order))
 
         # Modified filter resources (60 records/call)
+        async for account in client.accounts.sync(division):
+            await db.merge(AccountORM.from_exact(account))
+
+        async for item in client.items.sync(division):
+            await db.merge(ItemORM.from_exact(item))
+
         async for transfer in client.warehouse_transfers.sync(division):
             await db.merge(WarehouseTransferORM.from_exact(transfer))
 
@@ -459,24 +471,64 @@ unit_desc = await get_purchase_unit_description(client, division, supplier_item_
 
 ---
 
+## API Architecture
+
+The SDK uses a **mixin-based architecture** for API capabilities. Each resource explicitly declares which operations it supports:
+
+| Mixin | Methods | Description |
+|-------|---------|-------------|
+| `ReadableMixin` | `list()`, `list_all()`, `list_next()`, `get()` | Query and retrieve records |
+| `WritableMixin` | `create()`, `update()`, `delete()` | Mutate records |
+| `SyncableMixin` | `sync()` | Incremental synchronization |
+
+**Benefits:**
+- **Type-safe**: IDE autocomplete only shows available methods
+- **Discoverable**: `hasattr(client.units, 'create')` returns `False`
+- **Explicit**: No `NotImplementedError` surprises at runtime
+
+### Checking Capabilities
+
+```python
+from exact_online.api.base import ReadableMixin, WritableMixin, SyncableMixin
+
+# Type checking
+if isinstance(client.purchase_orders, SyncableMixin):
+    async for order in client.purchase_orders.sync(division):
+        ...
+
+# Runtime check
+if hasattr(client.units, 'create'):
+    # This won't execute - Units is read-only
+    await client.units.create(...)
+```
+
+---
+
 ## Available API Resources
 
-| Resource | Property | Sync Support |
-|----------|----------|--------------|
-| Purchase Orders | `client.purchase_orders` | Sync API |
-| Purchase Order Lines | `client.purchase_order_lines` | - |
-| Sales Orders | `client.sales_orders` | Sync API |
-| Shop Orders | `client.shop_orders` | Sync API |
-| Warehouse Transfers | `client.warehouse_transfers` | Modified filter |
-| Goods Receipts | `client.goods_receipts` | Modified filter |
-| Goods Receipt Lines | `client.goods_receipt_lines` | - |
-| Stock Counts | `client.stock_counts` | Modified filter |
-| Stock Count Lines | `client.stock_count_lines` | - |
-| Supplier Items | `client.supplier_items` | - |
-| Units | `client.units` | - |
-| Warehouses | `client.warehouses` | Modified filter |
-| Divisions | `client.divisions` | Modified filter |
-| Me | `client.me` | - |
+| Resource | Property | list | get | create | update | delete | sync |
+|----------|----------|:----:|:---:|:------:|:------:|:------:|:----:|
+| **Accounts** | `client.accounts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ Modified |
+| **Items** | `client.items` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ Modified |
+| **Purchase Item Prices** | `client.purchase_item_prices` | - | - | - | - | - | ✓ Sync API |
+| **Purchase Orders** | `client.purchase_orders` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ Sync API |
+| **Purchase Order Lines** | `client.purchase_order_lines` | ✓ | ✓ | ✓ | ✓ | ✓ | - |
+| **Sales Orders** | `client.sales_orders` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ Sync API |
+| **Shop Orders** | `client.shop_orders` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ Sync API |
+| **Warehouse Transfers** | `client.warehouse_transfers` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ Modified |
+| **Goods Receipts** | `client.goods_receipts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ Modified |
+| **Goods Receipt Lines** | `client.goods_receipt_lines` | ✓ | ✓ | ✓ | ✓ | ✓ | - |
+| **Stock Counts** | `client.stock_counts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ Modified |
+| **Stock Count Lines** | `client.stock_count_lines` | ✓ | ✓ | ✓ | ✓ | ✓ | - |
+| **Supplier Items** | `client.supplier_items` | ✓ | ✓ | ✓ | ✓ | ✓ | - |
+| **Units** | `client.units` | ✓ | ✓ | - | - | - | - |
+| **Warehouses** | `client.warehouses` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ Modified |
+| **Divisions** | `client.divisions` | ✓ | ✓ | - | - | - | ✓ Modified |
+| **Me** | `client.me` | - | ✓ | - | - | - | - |
+
+**Sync Methods:**
+- **Sync API** = 1000 records/call (fast, timestamp-based)
+- **Modified** = 60 records/call (uses `Modified ge datetime'...'` filter)
 
 ### Common Operations
 

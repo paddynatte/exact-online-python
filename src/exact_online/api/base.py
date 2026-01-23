@@ -1,4 +1,4 @@
-"""Base API resource class with CRUD operations."""
+"""Base API resource class with capability mixins."""
 
 from __future__ import annotations
 
@@ -38,23 +38,21 @@ def _has_snake_keys(data: dict[str, Any]) -> bool:
 class BaseAPI[TModel: BaseModel]:
     """Base class for API resources.
 
-    Provides common CRUD operations: list, get, create, update, delete.
-    Subclasses define ENDPOINT and MODEL.
+    Provides core functionality shared by all API resources.
+    Subclasses combine this with mixins for specific capabilities:
+    - ReadableMixin: list, list_all, list_next, get
+    - WritableMixin: create, update, delete
+    - SyncableMixin: sync
 
-    Data passed to create() and update() can use either:
-    - snake_case keys (e.g., "warehouse_from") - auto-converted to PascalCase
-    - PascalCase keys (e.g., "WarehouseFrom") - used as-is
-
-    For sync() support, subclasses can define:
-    - SYNC_ENDPOINT: Uses Sync API (1000 records/call) if set
-    - RESOURCE_NAME: Used as key for storing sync state
+    Subclasses must define ENDPOINT and MODEL.
     """
 
     ENDPOINT: ClassVar[str]
     MODEL: ClassVar[type[BaseModel]]
     ID_FIELD: ClassVar[str] = "ID"
-    SYNC_ENDPOINT: ClassVar[str | None] = None  # e.g., "/sync/PurchaseOrder/PurchaseOrders"
-    RESOURCE_NAME: ClassVar[str] = ""  # e.g., "purchase_orders" - for sync state storage
+    ID_IS_GUID: ClassVar[bool] = True  # False for int/string keys like Division.Code
+
+    _client: Client
 
     def __init__(self, client: Client) -> None:
         """Initialize the API resource."""
@@ -89,6 +87,25 @@ class BaseAPI[TModel: BaseModel]:
 
         items = cast(list[TModel], [self.MODEL.model_validate(item) for item in results])
         return items, next_url
+
+
+class ReadableMixin[TModel: BaseModel]:
+    """Mixin for APIs that support read operations (list, get).
+
+    Adds: list(), list_all(), list_next(), get()
+
+    Must be used with BaseAPI (expects _client, ENDPOINT, MODEL, _parse_list_response).
+    """
+
+    # These are provided by BaseAPI
+    _client: Client
+    ENDPOINT: ClassVar[str]
+    MODEL: ClassVar[type[BaseModel]]
+    ID_IS_GUID: ClassVar[bool]
+
+    def _parse_list_response(
+        self, response: dict[str, Any]
+    ) -> tuple[list[TModel], str | None]: ...
 
     async def list(
         self,
@@ -201,6 +218,148 @@ class BaseAPI[TModel: BaseModel]:
             for item in result.items:
                 yield item
 
+    async def get(self, division: int, id: str) -> TModel:
+        """Get a single record by ID.
+
+        Args:
+            division: The division ID.
+            id: The record's unique identifier (GUID or other key type).
+
+        Returns:
+            The Pydantic model instance.
+        """
+        if self.ID_IS_GUID:
+            endpoint = f"{self.ENDPOINT}(guid'{id}')"
+        else:
+            endpoint = f"{self.ENDPOINT}({id})"
+
+        response = await self._client.request(
+            method="GET",
+            endpoint=endpoint,
+            division=division,
+        )
+
+        data = response.get("d", response)
+        return cast(TModel, self.MODEL.model_validate(data))
+
+
+class WritableMixin[TModel: BaseModel]:
+    """Mixin for APIs that support write operations.
+
+    Adds: create(), update(), delete()
+
+    Must be used with BaseAPI (expects _client, ENDPOINT, MODEL, _prepare_data).
+    """
+
+    # These are provided by BaseAPI
+    _client: Client
+    ENDPOINT: ClassVar[str]
+    MODEL: ClassVar[type[BaseModel]]
+    ID_IS_GUID: ClassVar[bool]
+
+    def _prepare_data(self, data: dict[str, Any]) -> dict[str, Any]: ...
+
+    async def create(self, division: int, data: dict[str, Any]) -> TModel:
+        """Create a new record.
+
+        Data can use either snake_case or PascalCase keys:
+        - snake_case: {"warehouse_from": "guid", "description": "Test"}
+        - PascalCase: {"WarehouseFrom": "guid", "Description": "Test"}
+
+        Args:
+            division: The division ID.
+            data: The record data (snake_case auto-converted to PascalCase).
+
+        Returns:
+            The created Pydantic model instance.
+        """
+        api_data = self._prepare_data(data)
+
+        response = await self._client.request(
+            method="POST",
+            endpoint=self.ENDPOINT,
+            division=division,
+            json=api_data,
+        )
+
+        result = response.get("d", response)
+        return cast(TModel, self.MODEL.model_validate(result))
+
+    async def update(self, division: int, id: str, data: dict[str, Any]) -> TModel:
+        """Update an existing record.
+
+        Data can use either snake_case or PascalCase keys:
+        - snake_case: {"description": "Updated", "status": 50}
+        - PascalCase: {"Description": "Updated", "Status": 50}
+
+        Args:
+            division: The division ID.
+            id: The record's unique identifier (GUID or other key type).
+            data: The fields to update (snake_case auto-converted to PascalCase).
+
+        Returns:
+            The updated Pydantic model instance.
+        """
+        if self.ID_IS_GUID:
+            endpoint = f"{self.ENDPOINT}(guid'{id}')"
+        else:
+            endpoint = f"{self.ENDPOINT}({id})"
+        api_data = self._prepare_data(data)
+
+        response = await self._client.request(
+            method="PUT",
+            endpoint=endpoint,
+            division=division,
+            json=api_data,
+        )
+
+        result = response.get("d", response)
+        return cast(TModel, self.MODEL.model_validate(result))
+
+    async def delete(self, division: int, id: str) -> None:
+        """Delete a record.
+
+        Args:
+            division: The division ID.
+            id: The record's unique identifier (GUID or other key type).
+        """
+        if self.ID_IS_GUID:
+            endpoint = f"{self.ENDPOINT}(guid'{id}')"
+        else:
+            endpoint = f"{self.ENDPOINT}({id})"
+
+        await self._client.request(
+            method="DELETE",
+            endpoint=endpoint,
+            division=division,
+        )
+
+
+class SyncableMixin[TModel: BaseModel]:
+    """Mixin for APIs that support incremental sync.
+
+    Adds: sync()
+
+    Subclasses must define RESOURCE_NAME.
+    Optionally define SYNC_ENDPOINT for Sync API support (1000 records/call).
+    Without SYNC_ENDPOINT, falls back to Modified filter (60 records/call).
+
+    Must be used with BaseAPI (expects _client, ENDPOINT, MODEL, _parse_list_response).
+    """
+
+    # These are provided by BaseAPI
+    _client: Client
+    ENDPOINT: ClassVar[str]
+    MODEL: ClassVar[type[BaseModel]]
+
+    # These must be defined by the subclass
+    SYNC_ENDPOINT: ClassVar[str | None] = None
+    RESOURCE_NAME: ClassVar[str]
+
+    def _parse_list_response(
+        self, response: dict[str, Any]
+    ) -> tuple[list[TModel], str | None]: ...
+
     async def sync(
         self,
         division: int,
@@ -230,15 +389,10 @@ class BaseAPI[TModel: BaseModel]:
             async for order in client.purchase_orders.sync(division):
                 await db.merge(PurchaseOrderORM.from_exact(order))
         """
-        if not self.RESOURCE_NAME:
-            raise NotImplementedError(
-                f"{self.__class__.__name__} does not define RESOURCE_NAME for sync"
-            )
-
         # Load last sync state
         storage = self._client.oauth.token_storage
         state = await storage.get_sync_state(division, self.RESOURCE_NAME)
-        
+
         # Determine endpoint and filter based on Sync API support
         if self.SYNC_ENDPOINT:
             # Sync API: 1000 records per call, timestamp-based
@@ -295,93 +449,3 @@ class BaseAPI[TModel: BaseModel]:
             last_sync=datetime.now(UTC),
         )
         await storage.save_sync_state(division, self.RESOURCE_NAME, new_state)
-
-    async def get(self, division: int, id: str) -> TModel:
-        """Get a single record by ID.
-
-        Args:
-            division: The division ID.
-            id: The record's unique identifier (GUID).
-
-        Returns:
-            The Pydantic model instance.
-        """
-        endpoint = f"{self.ENDPOINT}(guid'{id}')"
-
-        response = await self._client.request(
-            method="GET",
-            endpoint=endpoint,
-            division=division,
-        )
-
-        data = response.get("d", response)
-        return cast(TModel, self.MODEL.model_validate(data))
-
-    async def create(self, division: int, data: dict[str, Any]) -> TModel:
-        """Create a new record.
-
-        Data can use either snake_case or PascalCase keys:
-        - snake_case: {"warehouse_from": "guid", "description": "Test"}
-        - PascalCase: {"WarehouseFrom": "guid", "Description": "Test"}
-
-        Args:
-            division: The division ID.
-            data: The record data (snake_case auto-converted to PascalCase).
-
-        Returns:
-            The created Pydantic model instance.
-        """
-        api_data = self._prepare_data(data)
-
-        response = await self._client.request(
-            method="POST",
-            endpoint=self.ENDPOINT,
-            division=division,
-            json=api_data,
-        )
-
-        result = response.get("d", response)
-        return cast(TModel, self.MODEL.model_validate(result))
-
-    async def update(self, division: int, id: str, data: dict[str, Any]) -> TModel:
-        """Update an existing record.
-
-        Data can use either snake_case or PascalCase keys:
-        - snake_case: {"description": "Updated", "status": 50}
-        - PascalCase: {"Description": "Updated", "Status": 50}
-
-        Args:
-            division: The division ID.
-            id: The record's unique identifier (GUID).
-            data: The fields to update (snake_case auto-converted to PascalCase).
-
-        Returns:
-            The updated Pydantic model instance.
-        """
-        endpoint = f"{self.ENDPOINT}(guid'{id}')"
-        api_data = self._prepare_data(data)
-
-        response = await self._client.request(
-            method="PUT",
-            endpoint=endpoint,
-            division=division,
-            json=api_data,
-        )
-
-        result = response.get("d", response)
-        return cast(TModel, self.MODEL.model_validate(result))
-
-    async def delete(self, division: int, id: str) -> None:
-        """Delete a record.
-
-        Args:
-            division: The division ID.
-            id: The record's unique identifier (GUID).
-        """
-        endpoint = f"{self.ENDPOINT}(guid'{id}')"
-
-        await self._client.request(
-            method="DELETE",
-            endpoint=endpoint,
-            division=division,
-        )

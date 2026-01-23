@@ -2,15 +2,20 @@
 
 from typing import ClassVar
 
-from exact_online.api.base import BaseAPI
+from exact_online.api.base import BaseAPI, ReadableMixin, SyncableMixin, WritableMixin
 from exact_online.models.purchase_order import PurchaseOrder
 
 
-class PurchaseOrdersAPI(BaseAPI[PurchaseOrder]):
+class PurchaseOrdersAPI(
+    BaseAPI[PurchaseOrder],
+    ReadableMixin[PurchaseOrder],
+    WritableMixin[PurchaseOrder],
+    SyncableMixin[PurchaseOrder],
+):
     """API resource for Purchase Orders.
 
-    Supports full CRUD operations and sync():
-    - list, get, create, update, delete
+    Supports:
+    - list(), get(), create(), update(), delete()
     - sync() uses Sync API (1000 records/call)
 
     Usage:

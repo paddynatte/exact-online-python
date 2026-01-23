@@ -2,16 +2,22 @@
 
 from typing import ClassVar
 
-from exact_online.api.base import BaseAPI
+from exact_online.api.base import BaseAPI, ReadableMixin, SyncableMixin, WritableMixin
 from exact_online.models.warehouse import Warehouse
 
 
-class WarehousesAPI(BaseAPI[Warehouse]):
+class WarehousesAPI(
+    BaseAPI[Warehouse],
+    ReadableMixin[Warehouse],
+    WritableMixin[Warehouse],
+    SyncableMixin[Warehouse],
+):
     """API resource for Warehouses.
 
     Warehouses are locations where inventory is stored.
-    Supports full CRUD operations and sync():
-    - list, get, create, update, delete
+
+    Supports:
+    - list(), get(), create(), update(), delete()
     - sync() uses Modified filter (no Sync API support)
 
     Usage:

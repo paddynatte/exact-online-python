@@ -1,18 +1,21 @@
 """Divisions API resource."""
 
-from typing import Any, ClassVar
+from typing import ClassVar
 
-from exact_online.api.base import BaseAPI
+from exact_online.api.base import BaseAPI, ReadableMixin, SyncableMixin
 from exact_online.models.division import Division
 
 
-class DivisionsAPI(BaseAPI[Division]):
-    """API resource for Divisions (read-only).
+class DivisionsAPI(
+    BaseAPI[Division], ReadableMixin[Division], SyncableMixin[Division]
+):
+    """API resource for Divisions (read-only with sync).
 
     Returns only divisions that are accessible to the signed-in user.
     The primary key is `Code` (int), not a UUID like other entities.
 
-    This endpoint only supports GET operations and sync():
+    This endpoint supports read operations and sync:
+    - list(), get()
     - sync() uses Modified filter (no Sync API support)
 
     Usage:
@@ -28,16 +31,5 @@ class DivisionsAPI(BaseAPI[Division]):
     ENDPOINT: ClassVar[str] = "/hrm/Divisions"
     MODEL: ClassVar[type[Division]] = Division
     ID_FIELD: ClassVar[str] = "Code"
+    ID_IS_GUID: ClassVar[bool] = False  # Code is an integer, not a GUID
     RESOURCE_NAME: ClassVar[str] = "divisions"
-
-    async def create(self, division: int, data: dict[str, Any]) -> Division:
-        """Not supported - Divisions endpoint is read-only."""
-        raise NotImplementedError("Divisions endpoint is read-only (GET only)")
-
-    async def update(self, division: int, id: str, data: dict[str, Any]) -> Division:
-        """Not supported - Divisions endpoint is read-only."""
-        raise NotImplementedError("Divisions endpoint is read-only (GET only)")
-
-    async def delete(self, division: int, id: str) -> None:
-        """Not supported - Divisions endpoint is read-only."""
-        raise NotImplementedError("Divisions endpoint is read-only (GET only)")

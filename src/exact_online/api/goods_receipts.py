@@ -2,19 +2,21 @@
 
 from typing import ClassVar
 
-from exact_online.api.base import BaseAPI
+from exact_online.api.base import BaseAPI, ReadableMixin, SyncableMixin, WritableMixin
 from exact_online.models.goods_receipt import GoodsReceipt
 
 
-class GoodsReceiptsAPI(BaseAPI[GoodsReceipt]):
+class GoodsReceiptsAPI(
+    BaseAPI[GoodsReceipt],
+    ReadableMixin[GoodsReceipt],
+    WritableMixin[GoodsReceipt],
+    SyncableMixin[GoodsReceipt],
+):
     """API resource for Goods Receipts.
 
-    Supports full CRUD operations and sync():
-    - list, get, create, update, delete
+    Supports:
+    - list(), get(), create(), update(), delete()
     - sync() uses Modified filter (no Sync API support)
-
-    Note: For creating a GoodsReceipt, you must supply one or more
-    GoodsReceiptLines and a ReceiptDate.
 
     Usage:
         receipts = await client.goods_receipts.list(division=123)
@@ -24,10 +26,8 @@ class GoodsReceiptsAPI(BaseAPI[GoodsReceipt]):
         receipt = await client.goods_receipts.create(
             division=123,
             data={
-                "receipt_date": "2024-01-01",
-                "goods_receipt_lines": [
-                    {"item": "item-guid", "quantity_received": 10}
-                ]
+                "supplier": "guid",
+                "goods_receipt_lines": [...]
             }
         )
 

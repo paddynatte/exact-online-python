@@ -2,23 +2,21 @@
 
 from typing import ClassVar
 
-from exact_online.api.base import BaseAPI
+from exact_online.api.base import BaseAPI, ReadableMixin, SyncableMixin, WritableMixin
 from exact_online.models.stock_count import StockCount
 
 
-class StockCountsAPI(BaseAPI[StockCount]):
+class StockCountsAPI(
+    BaseAPI[StockCount],
+    ReadableMixin[StockCount],
+    WritableMixin[StockCount],
+    SyncableMixin[StockCount],
+):
     """API resource for Stock Counts.
 
-    Supports full CRUD operations and sync():
-    - list, get, create, update, delete
+    Supports:
+    - list(), get(), create(), update(), delete()
     - sync() uses Modified filter (no Sync API support)
-
-    Status values:
-        12 - Open (draft)
-        21 - Processed
-
-    Note: For creating a StockCount, you must supply StockCountLines,
-    StockCountDate, and Warehouse.
 
     Usage:
         counts = await client.stock_counts.list(division=123)
@@ -28,12 +26,8 @@ class StockCountsAPI(BaseAPI[StockCount]):
         count = await client.stock_counts.create(
             division=123,
             data={
-                "warehouse": "warehouse-guid",
-                "stock_count_date": "2024-01-01",
-                "status": 12,  # Open
-                "stock_count_lines": [
-                    {"item": "item-guid", "quantity_new": 100}
-                ]
+                "warehouse": "guid",
+                "stock_count_lines": [...]
             }
         )
 
